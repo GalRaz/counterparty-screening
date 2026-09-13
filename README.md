@@ -55,6 +55,8 @@ Output: `cases/<engagement>/summary.md` and `cases/<engagement>/<subject>/record
 
 - `cases/` holds third-party personal data. It is gitignored. **Do not Syncthing-share this folder.**
 - `screen purge` drops cached vendor text after 90 days and records after 12 months; scan IDs are kept.
+  It deletes only under the cases root, removes the purged subject from the engagement's `meta.json`,
+  and deletes `summary.md` (which names the subject) — regenerate the report afterwards.
 - Request bodies are never logged.
 - Vendor terms may restrict onward disclosure and require notifying data subjects. Check before sharing a summary outside the commissioning party.
 

@@ -29,11 +29,19 @@ CLI commands. Read `screening-tools-spec.md` §3, §6 and §7.1 before your firs
    `civil_claim`, `insolvency`, `commentary_only`. Check for later developments before recording (§3.4).
 7. **Scope limit.** Record only what bears on counterparty risk. No family, health, relationships, home
    address, political or religious affiliation, even if a search surfaces it (§3.7).
-8. **A failed call is a coverage gap, not a clean result** (§6.7).
+8. **A failed call is a coverage gap, not a clean result** (§6.7). If you could not do something —
+   a language you could not search, a registry you could not reach — record it with `screen gap add`.
+9. **Never pass `--force` to `screen report` without the user's explicit approval in this conversation;
+   fix the record instead.** `--force` writes a report the linter rejected, under a LINT FAILED banner.
 
 ## Procedure
 
 ### 0. Set up
+
+**Prerequisites.** Before anything else, run `.venv/bin/screen credits` and confirm all four keys
+exist in the environment or Keychain: `OPENSANCTIONS_API_KEY`, `NAMESCAN_API_KEY`,
+`NAMESCAN_API_KEY_TEST`, `COMPANIES_HOUSE_API_KEY`. Tell the user which are missing and what that
+costs them (no Layer A, no Layer C, no Companies House) — never proceed silently on a partial set.
 
 ```bash
 .venv/bin/screen case new <ENGAGEMENT-ID> --commissioning-party "<who is commissioning this>"
@@ -72,7 +80,9 @@ NameScan as `country`.
 ```
 
 If it exits 3 (credits or ceiling) or 4 (no key), report that to the user and continue; the record
-already carries the gap and the report will carry the §8 paragraph.
+already carries the gap and the report will carry the §8 paragraph. A `--test` run buys no coverage:
+the §8 paragraph stays and the report says the test key was used. Re-running `run C` after a failed
+or key-less attempt replaces that attempt — you do not need to clean up first.
 
 ### 4. Layer B — you run this
 
@@ -108,6 +118,21 @@ When done with a subject:
 
 Do this for every subject, including those with zero items. A subject with no Layer B entry is a gap.
 
+If you could not search a language the plan called for, or could not reach a source, record it:
+
+```bash
+.venv/bin/screen gap add <ID> <slug> "no Dzongkha-language sources reachable for this subject"
+```
+
+If Layer B could not be run at all for a subject, close it as failed — it records the gap for you:
+
+```bash
+.venv/bin/screen layerb close <ID> <slug> --mode full --queries-file <path> --languages en \
+  --status failed --reason "web search unavailable for this session"
+```
+
+`layerb close` refuses `--mode reduced` unless Layer C earned it (a match with media, §3.0).
+
 ### 5. Layer D (organisations)
 
 ```bash
@@ -132,7 +157,14 @@ Only after the user says which to include, add them with `subject add` and repea
 ```
 
 If lint fails, fix the *record* (wrong identity class, missing corroborator, missing `layerb close`),
-not the linter. Then read `cases/<ID>/summary.md` and give the user a short account in chat: what was
+not the linter. To drop an item you misclassified, remove it by its 0-based index and add it again:
+
+```bash
+.venv/bin/screen record show <ID> <slug>      # find the index in media_items
+.venv/bin/screen media rm <ID> <slug> 2
+```
+
+Re-running `run A`, `run C` or `run D` replaces that layer's previous result; it never duplicates it. Then read `cases/<ID>/summary.md` and give the user a short account in chat: what was
 screened, how many candidates per subject, what remains unresolved, and what identifiers would sharpen a
 re-screen. Use the report's own phrasing for negatives. Do not add a verdict.
 
