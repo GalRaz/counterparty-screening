@@ -82,3 +82,18 @@ def test_report_section_extraction():
     txt = "# T\n## Findings\na\nb\n## Coverage gaps\nc\n"
     assert L.report_section(txt, "Findings") == "a\nb\n"
     assert L.report_section(txt, "Nope") == ""
+
+
+def test_legal_status_word_not_justified_by_possible_subject():
+    r = rec(media_items=[item(identity="possible_subject", legal_status="convicted")])
+    report = "## Findings\nMr Phillips was convicted of fraud.\n"
+    assert "legal_status_mismatch" in rules(L.lint_report(report, [r]))
+    # Verify the violation message contains the word "convicted" not "onvicted"
+    vs = L.lint_report(report, [r])
+    msgs = [v.message for v in vs if v.rule == "legal_status_mismatch"]
+    assert any("convicted" in msg for msg in msgs)
+
+
+def test_whitespace_corroborator_is_missing():
+    r = rec(media_items=[item(identity="confirmed_subject", corroborator="  ")])
+    assert "confirmed_without_corroborator" in rules(L.lint_record(r))

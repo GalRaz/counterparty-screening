@@ -53,7 +53,7 @@ def lint_record(record: dict) -> list[Violation]:
     vs += _forbidden(prose, f"{slug}/record.json")
 
     for i, m in enumerate(record["media_items"]):
-        if m.get("identity") == "confirmed_subject" and not m.get("corroborator"):
+        if m.get("identity") == "confirmed_subject" and not (m.get("corroborator") or "").strip():
             vs.append(Violation("confirmed_without_corroborator",
                                 f"media_items[{i}] is confirmed_subject with no corroborator (§3.2)", f"{slug}/record.json"))
 
@@ -86,11 +86,12 @@ def lint_report(report: str, records: list[dict]) -> list[Violation]:
                 vs.append(Violation("possible_subject_in_findings",
                                     f"possible_subject item {m.get('title')!r} cited in Findings (§3.2)", "summary.md#Findings"))
 
-    present = {m.get("legal_status") for r in records for m in r["media_items"]}
+    present = {m.get("legal_status") for r in records for m in r["media_items"] if m.get("identity") == "confirmed_subject"}
     for pat, status in LEGAL_WORDS.items():
         if re.search(pat, findings, re.I) and status not in present:
+            word = re.sub(r"\\b", "", pat)
             vs.append(Violation("legal_status_mismatch",
-                                f"Findings uses {pat.strip(chr(92) + 'b')!r} but no media item has legal_status {status!r} (§3.4)",
+                                f"Findings uses {word!r} but no media item has legal_status {status!r} (§3.4)",
                                 "summary.md#Findings"))
 
     if not all(_layer_c_ok(r) for r in records) and SECTION_8_MARKER not in report:
