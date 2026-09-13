@@ -88,7 +88,13 @@ def match(subject: Subject, client: httpx.Client, api_key: str, now: str) -> Lay
         res.coverage_gaps.append(f"Layer A (opensanctions) call failed: {type(e).__name__}")
         return res
 
+    skipped_missing_id = False
     for result in results:
+        if not result.get("id"):
+            if not skipped_missing_id:
+                res.coverage_gaps.append("Layer A returned a candidate without an id; skipped")
+                skipped_missing_id = True
+            continue
         cand = _candidate(result)
         try:
             e = client.get(f"/entities/{cand['id']}", headers=headers, timeout=config.DEFAULT_TIMEOUT)

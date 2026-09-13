@@ -101,3 +101,30 @@ def test_no_dob_is_a_coverage_gap():
     s = Subject(type="person", name="Jane Doe")
     res = OS.match(s, mock_client(lambda r: json_response(200, {"responses": {"q1": {"results": []}}}), OPENSANCTIONS_BASE), "KEY", NOW)
     assert "no DOB supplied" in res.coverage_gaps
+
+
+def test_result_without_id_is_skipped_with_gap():
+    """Test that candidates without an id are skipped instead of crashing."""
+    first_result = load_fixture("opensanctions_match.json")["responses"]["q1"]["results"][0]
+
+    def handler(req: httpx.Request):
+        if req.url.path == "/match/default":
+            return json_response(200, {
+                "responses": {
+                    "q1": {
+                        "results": [
+                            {"caption": "x", "score": 0.8},  # Missing id
+                            first_result  # Well-formed result
+                        ]
+                    }
+                }
+            })
+        if req.url.path.startswith("/entities/"):
+            return json_response(200, load_fixture("opensanctions_entity.json"))
+        raise AssertionError(req.url)
+
+    res = OS.match(person(), mock_client(handler, OPENSANCTIONS_BASE), "KEY", NOW)
+    assert res.check["status"] == "ok"
+    assert len(res.candidates) == 1
+    assert res.candidates[0]["id"] == "Q12345"
+    assert "Layer A returned a candidate without an id; skipped" in res.coverage_gaps
