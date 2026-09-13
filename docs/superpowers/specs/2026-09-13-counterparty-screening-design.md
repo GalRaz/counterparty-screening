@@ -88,6 +88,7 @@ provenance is never merged. `human_review_required` is always `true`. Validated 
   (e.g. "convicted" in prose requires a `convicted` item).
 - If any subject lacks a successful Layer C, the report must contain the §8 limitation paragraph.
 - Every `checks_run` entry with `status: failed` must have a matching `coverage_gaps` entry.
+- A subject with `media_items` but no Layer B `checks_run` entry (i.e. `layerb close` not run) fails.
 Lint failure blocks `report` from writing.
 
 ### `screening/report.py`
@@ -103,6 +104,8 @@ screen subject add <engagement-id> --type person|organization --name ... [--alia
 screen run A|C|D <engagement-id> [--subject <slug>] [--test]
 screen mode <engagement-id> <slug>               # prints B mode + query families
 screen media add <engagement-id> <slug>          # one media_item as JSON on stdin
+screen layerb close <engagement-id> <slug> --mode full|reduced --queries-file <path> --languages en,dz,...
+                                                 # writes the Layer B checks_run entry (§5)
 screen registry add <engagement-id> <slug>       # one manual registry finding on stdin
 screen record show <engagement-id> <slug>
 screen report <engagement-id>                    # lint, then write summary.md
@@ -123,7 +126,8 @@ to `screen media add`. It proposes — never adds — subjects it thinks should 
 1. User: `/screen GBC-BTN-2026-002 "Acme Pte Ltd (SG)", "Jane Doe, director"`.
 2. Skill normalises, calls `case new`, `subject add` for each, recording identifier sources.
 3. `run A` for all subjects. `run C` for all subjects (pre-flight, dedup, ceiling).
-4. `mode` per subject → agent runs Layer B, classifies, `media add` per item.
+4. `mode` per subject → agent runs Layer B, classifies, `media add` per item, then `layerb close`
+   with the exact query strings and languages searched.
 5. `run D` for organisations → proposed directors printed → agent asks user; user adds via `subject add`; steps 3–4 repeat for them.
 6. `report` → lint → `cases/<engagement>/summary.md` plus per-subject `record.json`.
 
