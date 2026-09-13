@@ -14,12 +14,12 @@ LATER = "2026-10-01T10:00:00+00:00"
 
 
 def person():
-    return Subject(type="person", name="Mark Phillips", jurisdiction="AU",
+    return Subject(type="person", name="Alex Example", jurisdiction="AU",
                    identifiers=[Identifier("dob", "1970", "passport copy")])
 
 
 def org():
-    return Subject(type="organization", name="Green Bond Corporation", jurisdiction="LU",
+    return Subject(type="organization", name="Example Bond Corporation", jurisdiction="LU",
                    identifiers=[Identifier("registration_number", "B123456", "RCS extract")])
 
 
@@ -53,9 +53,9 @@ def client_for(handler, **kw):
 
 
 def test_person_body_only_uses_sourced_fields():
-    s = Subject(type="person", name="Mark Laurence Allington", jurisdiction="GB")
+    s = Subject(type="person", name="Jane Alice Example", jurisdiction="GB")
     body = NS.build_person_body(s, include_media=True)
-    assert body == {"firstName": "Mark", "middleName": "Laurence", "lastName": "Allington",
+    assert body == {"firstName": "Jane", "middleName": "Alice", "lastName": "Example",
                     "exact": False, "matchRate": 75, "maxResultCount": 100, "includeAdvancedMedia": True}
     assert "country" not in body  # jurisdiction is NOT a sourced identifier (§7.5)
 
@@ -73,7 +73,7 @@ def test_person_body_with_sourced_attributes_and_original_name():
 
 def test_org_body():
     assert NS.build_org_body(org(), include_media=True) == {
-        "name": "Green Bond Corporation", "registrationNumber": "B123456",
+        "name": "Example Bond Corporation", "registrationNumber": "B123456",
         "exact": False, "matchRate": 75, "maxResultCount": 100, "includeAdvancedMedia": True}
 
 
@@ -301,11 +301,11 @@ def test_person_body_splits_latin_primary_name_even_with_non_latin_alias():
 
 def test_aliases_not_sent_are_recorded_as_a_coverage_gap(tmp_path):
     handler, _ = make_handler()
-    s = Subject(type="person", name="Mark Phillips", aliases=["M. Phillips", "Marcus Phillips"],
+    s = Subject(type="person", name="Alex Example", aliases=["A. Example", "Alexander Example"],
                 identifiers=[Identifier("dob", "1970", "passport copy")])
     with Store(tmp_path / "s.db") as store:
         res = client_for(handler).scan(s, include_media=True, now=NOW, store=store)
-    assert ("Layer C scanned the primary name only; alias variant(s) not sent: M. Phillips, Marcus Phillips"
+    assert ("Layer C scanned the primary name only; alias variant(s) not sent: A. Example, Alexander Example"
             in res.coverage_gaps)
 
 
@@ -324,7 +324,7 @@ def test_apply_writes_slim_match_and_media_shapes(tmp_path):
     res.apply(rec)
     assert rec["layer_c"]["scan_date"] == "2026-09-13T10:00:00"
     assert rec["layer_c"]["matches"] == [{
-        "name": "Mark Phillips", "match_rate": 88, "category": "PEP", "matched_fields": "Name",
+        "name": "Alex Example", "match_rate": 88, "category": "PEP", "matched_fields": "Name",
         "official_lists": [{"keyword": "Australian PEP", "is_current": True}],
         "assessment": "unreviewed", "dispositioned_by": None, "dispositioned_at": None, "disposition_note": None}]
     assert rec["layer_c"]["advanced_media_items"] == [{
@@ -338,7 +338,7 @@ def test_apply_writes_slim_match_and_media_shapes(tmp_path):
 def test_apply_slims_organisation_matches(tmp_path):
     body = {**load_fixture("namescan_org.json"), "numberOfMatches": 1, "corporates": [
         {"matchRate": 91, "matchedFields": "Name", "category": "Sanction",
-         "entity": {"primaryName": "Green Bond Corporation",
+         "entity": {"primaryName": "Example Bond Corporation",
                     "officialLists": [{"keyword": "EU Sanctions", "isCurrent": False}]}}]}
     handler, _ = make_handler(org_body=body)
     with Store(tmp_path / "s.db") as store:
@@ -346,27 +346,27 @@ def test_apply_slims_organisation_matches(tmp_path):
     rec = new_record(org(), "E", "P", NOW)
     res.apply(rec)
     assert rec["layer_c"]["matches"] == [{
-        "name": "Green Bond Corporation", "match_rate": 91, "category": "Sanction",
+        "name": "Example Bond Corporation", "match_rate": 91, "category": "Sanction",
         "matched_fields": "Name", "official_lists": [{"keyword": "EU Sanctions", "is_current": False}],
         "assessment": "unreviewed", "dispositioned_by": None, "dispositioned_at": None, "disposition_note": None}]
 
 
 def test_alias_gap_survives_a_dedup_reuse(tmp_path):
     handler, state = make_handler()
-    s = Subject(type="person", name="Mark Phillips", aliases=["M. Phillips"],
+    s = Subject(type="person", name="Alex Example", aliases=["A. Example"],
                 identifiers=[Identifier("dob", "1970", "passport copy")])
     with Store(tmp_path / "s.db") as store:
         store.record_scan(s.normalised_key(), "ps-abc123", "namescan", "person", NOW)
         res = client_for(handler).scan(s, include_media=True, now=LATER, store=store)
     assert state["posts"] == 0 and res.layer_c["reused_prior_scan"] is True
-    assert "Layer C scanned the primary name only; alias variant(s) not sent: M. Phillips" in res.coverage_gaps
+    assert "Layer C scanned the primary name only; alias variant(s) not sent: A. Example" in res.coverage_gaps
 
 
 def test_alias_subject_copies_name_only_and_drops_aliases():
-    s = Subject(type="person", name="Mark Phillips", aliases=["M. Phillips", "Marcus Phillips"],
+    s = Subject(type="person", name="Alex Example", aliases=["A. Example", "Alexander Example"],
                 jurisdiction="AU", identifiers=[Identifier("dob", "1970", "passport copy")])
-    a = NS.alias_subject(s, "M. Phillips")
-    assert a.name == "M. Phillips"
+    a = NS.alias_subject(s, "A. Example")
+    assert a.name == "A. Example"
     assert a.aliases == []
     assert a.jurisdiction == "AU"
     assert a.identifier("dob") == "1970"
@@ -375,7 +375,7 @@ def test_alias_subject_copies_name_only_and_drops_aliases():
 
 def test_run_layer_c_ceiling_counts_aliases(tmp_path):
     handler, state = make_handler()
-    s = Subject(type="person", name="Mark Phillips", aliases=["M. Phillips", "Marcus Phillips"],
+    s = Subject(type="person", name="Alex Example", aliases=["A. Example", "Alexander Example"],
                 identifiers=[Identifier("dob", "1970", "passport copy")])
     with Store(tmp_path / "s.db") as store:
         # 1 subject + 2 aliases = 3 units, ceiling 2 must abort
@@ -391,7 +391,7 @@ def test_run_layer_c_ceiling_counts_aliases(tmp_path):
 def test_run_layer_c_preflight_cost_counts_aliases(tmp_path):
     # unit is 1.25 (media on); 1 subject + 2 aliases = 3 units => cost 3.75; balance 3 must abort
     handler, state = make_handler(credits=3.0)
-    s = Subject(type="person", name="Mark Phillips", aliases=["M. Phillips", "Marcus Phillips"],
+    s = Subject(type="person", name="Alex Example", aliases=["A. Example", "Alexander Example"],
                 identifiers=[Identifier("dob", "1970", "passport copy")])
     with Store(tmp_path / "s.db") as store:
         with pytest.raises(NS.RunAborted, match="credits"):
@@ -402,10 +402,10 @@ def test_run_layer_c_preflight_cost_counts_aliases(tmp_path):
 def test_run_layer_c_preflight_cost_skips_already_scanned_aliases(tmp_path):
     # dedup hit for one alias means only 2 new units (subject + 1 alias) => cost 2.5, balance 2.5 is enough
     handler, state = make_handler(credits=2.5)
-    s = Subject(type="person", name="Mark Phillips", aliases=["M. Phillips", "Marcus Phillips"],
+    s = Subject(type="person", name="Alex Example", aliases=["A. Example", "Alexander Example"],
                 identifiers=[Identifier("dob", "1970", "passport copy")])
     with Store(tmp_path / "s.db") as store:
-        store.record_scan(NS.alias_subject(s, "M. Phillips").normalised_key(), "ps-alias", "namescan", "person", NOW)
+        store.record_scan(NS.alias_subject(s, "A. Example").normalised_key(), "ps-alias", "namescan", "person", NOW)
         results = NS.run_layer_c([s], client_for(handler), store, now=NOW, max_subjects=20)
     assert len(results) == 1
 
@@ -413,7 +413,7 @@ def test_run_layer_c_preflight_cost_skips_already_scanned_aliases(tmp_path):
 def test_official_lists_keep_is_current_per_list(tmp_path):
     body = {**load_fixture("namescan_person.json"), "numberOfMatches": 1, "persons": [
         {"matchRate": 88, "matchedFields": "Name, DOB", "category": "PEP",
-         "person": {"name": "Mark Phillips", "officialLists": [
+         "person": {"name": "Alex Example", "officialLists": [
              {"keyword": "Australian PEP", "isCurrent": True},
              {"keyword": "EU Sanctions", "isCurrent": False},
              {"keyword": "Unknown List"}]}}]}

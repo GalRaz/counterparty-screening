@@ -56,10 +56,10 @@ For each nominated subject, decide `person` or `organization`, collect every nam
 you were given, and record identifiers **with sources**:
 
 ```bash
-.venv/bin/screen subject add <ID> --type person --name "Mark Phillips" --alias "M. Phillips" \
-  --jurisdiction AU --role "director, Carbon Capital Corporation" --id "dob=1970@passport copy in email 2026-08-01"
-.venv/bin/screen subject add <ID> --type organization --name "Carbon Capital Corporation Pty Ltd" \
-  --jurisdiction AU --id "lei=984500765B652F3C6A05@GLEIF search" --id "registration_number=32 667 478 471@ASIC extract"
+.venv/bin/screen subject add <ID> --type person --name "Alex Example" --alias "A. Example" \
+  --jurisdiction AU --role "director, Example Carbon" --id "dob=1970@passport copy in email 2026-08-01"
+.venv/bin/screen subject add <ID> --type organization --name "Example Carbon Pty Ltd" \
+  --jurisdiction AU --id "lei=TESTLEI0000000000001@GLEIF search" --id "registration_number=12 345 678 901@ASIC extract"
 ```
 
 Identifier kinds: `dob`, `country`, `gender`, `registration_number`, `tax_number`, `lei`,
@@ -112,7 +112,7 @@ For each result that might concern the subject:
 ```bash
 echo '{"title":"...","publisher":"...","published":"2024-06-01","url":"https://...","retrieval_status":"full",
 "identity":"possible_subject","corroborator":null,"legal_status":"allegation","source_type":"wire",
-"query":"\"Mark Phillips\" fraud","language":"en","summary":"<your own words, one or two sentences>"}' \
+"query":"\"Alex Example\" fraud","language":"en","summary":"<your own words, one or two sentences>"}' \
   | .venv/bin/screen media add <ID> <slug>
 ```
 
@@ -200,7 +200,7 @@ is not found or `--by` is empty.
 **Adding a discovered alias to an existing subject:**
 
 ```bash
-.venv/bin/screen subject alias <ID> <slug> "Marcus Phillips"
+.venv/bin/screen subject alias <ID> <slug> "Alexander Example"
 ```
 
 Exits 1 if that alias is already recorded. `run C` picks it up automatically the next time it runs.

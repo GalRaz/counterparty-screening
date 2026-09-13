@@ -10,12 +10,12 @@ from tests.conftest import NOW, json_response, load_fixture, mock_client
 
 
 def ccc():
-    return Subject(type="organization", name="Carbon Capital Corporation Pty Ltd", jurisdiction="AU",
-                   identifiers=[Identifier("lei", "984500765B652F3C6A05", "GLEIF search by user")])
+    return Subject(type="organization", name="Example Carbon Pty Ltd", jurisdiction="AU",
+                   identifiers=[Identifier("lei", "TESTLEI0000000000001", "GLEIF search by user")])
 
 
 def jer():
-    return Subject(type="organization", name="Jearrard Energy Resources Ltd", jurisdiction="GB")
+    return Subject(type="organization", name="Example Energy Ltd", jurisdiction="GB")
 
 
 def gleif_handler(req: httpx.Request):
@@ -28,9 +28,9 @@ def ch_handler(req: httpx.Request):
     assert auth == "Basic " + base64.b64encode(b"CHKEY:").decode()
     if req.url.path == "/search/companies":
         return json_response(200, load_fixture("ch_search.json"))
-    if req.url.path == "/company/13647702":
+    if req.url.path == "/company/00012345":
         return json_response(200, load_fixture("ch_profile.json"))
-    if req.url.path == "/company/13647702/officers":
+    if req.url.path == "/company/00012345/officers":
         return json_response(200, load_fixture("ch_officers.json"))
     raise AssertionError(req.url)
 
@@ -43,10 +43,10 @@ def test_gleif_by_lei_filter_and_normalisation():
         return gleif_handler(req)
 
     recs = RG.gleif_lookup(ccc(), mock_client(handler, GLEIF_BASE))
-    assert seen["params"] == {"filter[lei]": "984500765B652F3C6A05"}
+    assert seen["params"] == {"filter[lei]": "TESTLEI0000000000001"}
     assert recs == [{
-        "lei": "984500765B652F3C6A05", "legal_name": "CARBON CAPITAL CORPORATION PTY LTD",
-        "status": "ACTIVE", "jurisdiction": "AU", "registered_as": "667 478 471",
+        "lei": "TESTLEI0000000000001", "legal_name": "EXAMPLE CARBON PTY LTD",
+        "status": "ACTIVE", "jurisdiction": "AU", "registered_as": "345 678 901",
         "address": {"lines": ["LEVEL 12, 60 CARRINGTON STREET"], "city": "SYDNEY", "country": "AU"},
         "registration_status": "ISSUED"}]
 
@@ -59,26 +59,26 @@ def test_gleif_by_name_when_no_lei():
         return gleif_handler(req)
 
     RG.gleif_lookup(jer(), mock_client(handler, GLEIF_BASE))
-    assert seen["params"] == {"filter[entity.legalName]": "Jearrard Energy Resources Ltd", "page[size]": "10"}
+    assert seen["params"] == {"filter[entity.legalName]": "Example Energy Ltd", "page[size]": "10"}
 
 
 def test_companies_house_search_requires_exact_title():
     rec = RG.companies_house_lookup(jer(), mock_client(ch_handler, COMPANIES_HOUSE_BASE), "CHKEY")
-    assert rec["company_number"] == "13647702"
+    assert rec["company_number"] == "00012345"
     assert rec["status"] == "active" and rec["incorporated"] == "2021-09-28"
     assert rec["accounts"] == {"next_due": "2026-06-30", "overdue": True}
     assert rec["sic_codes"] == ["71121"]
-    assert [o["name"] for o in rec["officers"]] == ["ALLINGTON, Mark Laurence", "OBERHOLZER, Jan"]
+    assert [o["name"] for o in rec["officers"]] == ["EXAMPLE, Jane Alice", "SAMPLE, Sam"]
     assert rec["officers"][1]["resigned_on"] == "2025-01-20"
 
 
 def test_companies_house_no_exact_match_returns_none():
-    s = Subject(type="organization", name="Jearrard Energy", jurisdiction="GB")
+    s = Subject(type="organization", name="Example Energy", jurisdiction="GB")
     assert RG.companies_house_lookup(s, mock_client(ch_handler, COMPANIES_HOUSE_BASE), "CHKEY") is None
 
 
 def test_companies_house_uses_number_identifier_directly():
-    s = Subject(type="organization", name="whatever", identifiers=[Identifier("uk_company_number", "13647702", "user")])
+    s = Subject(type="organization", name="whatever", identifiers=[Identifier("uk_company_number", "00012345", "user")])
     paths = []
 
     def handler(req):
@@ -93,13 +93,13 @@ def test_run_layer_d_proposes_active_officers_only():
     res = RG.run_layer_d(jer(), gleif_client=mock_client(lambda r: json_response(200, {"data": []}), GLEIF_BASE),
                          ch_client=mock_client(ch_handler, COMPANIES_HOUSE_BASE), ch_api_key="CHKEY", now=NOW)
     assert res.check["status"] == "ok"
-    assert res.proposed_subjects == [{"name": "Mark Laurence Allington", "type": "person",
-                                      "reason": "active director of Jearrard Energy Resources Ltd",
-                                      "source": "Companies House officers list, company 13647702"}]
+    assert res.proposed_subjects == [{"name": "Jane Alice Example", "type": "person",
+                                      "reason": "active director of Example Energy Ltd",
+                                      "source": "Companies House officers list, company 00012345"}]
     rec = new_record(jer(), "E", "P", NOW)
     res.apply(rec)
-    assert rec["layer_d"]["companies_house"]["company_number"] == "13647702"
-    assert rec["proposed_subjects"][0]["name"] == "Mark Laurence Allington"
+    assert rec["layer_d"]["companies_house"]["company_number"] == "00012345"
+    assert rec["proposed_subjects"][0]["name"] == "Jane Alice Example"
 
 
 def test_run_layer_d_person_is_not_run():
@@ -139,7 +139,7 @@ def test_gb_org_without_key_records_the_companies_house_gap():
 
 def test_apply_carries_manual_findings_through_a_rerun():
     from screening.record import new_record as _nr
-    rec = _nr(Subject(type="organization", name="Green Bond Corporation", jurisdiction="LU"), "E", "P", NOW)
+    rec = _nr(Subject(type="organization", name="Example Bond Corporation", jurisdiction="LU"), "E", "P", NOW)
     rec["layer_d"] = {"gleif": [], "companies_house": None,
                       "manual_findings": [RG.manual_finding(registry="ACRA", url="https://x", retrieved=NOW,
                                                             fields={"status": "Live"})]}

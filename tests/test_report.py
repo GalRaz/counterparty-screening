@@ -7,9 +7,9 @@ from tests.conftest import NOW
 
 
 def build_case(cases_dir):
-    c = Case.create(cases_dir, "GBC-BTN-2026-002", "Gelephu Mindfulness City Authority", NOW)
+    c = Case.create(cases_dir, "GBC-BTN-2026-002", "Example City Authority", NOW)
     c.add_subject(Subject(type="organization", name="Acme Pte Ltd", jurisdiction="SG"), NOW)
-    c.add_subject(Subject(type="person", name="Mark Phillips", jurisdiction="AU"), NOW)
+    c.add_subject(Subject(type="person", name="Alex Example", jurisdiction="AU"), NOW)
     return c
 
 
@@ -20,13 +20,13 @@ def test_render_has_sections_and_section_8_when_no_layer_c(cases_dir):
         r["checks_run"].append({"layer": "A", "provider": "opensanctions", "status": "ok", "timestamp": NOW,
                                 "dataset": "default", "algorithm": "best", "threshold": 0.7, "limit": 10})
         r["checks_run"].append({"layer": "B", "provider": "web_search", "mode": "full", "mode_reason": "x",
-                                "queries_run": ['"Mark Phillips"'], "languages": ["en"], "status": "ok", "timestamp": NOW})
+                                "queries_run": ['"Alex Example"'], "languages": ["en"], "status": "ok", "timestamp": NOW})
     out = RP.render(c, recs, NOW)
     for h in ("Bottom line", "What was screened", "Limitations", "Findings", "Proposed additional subjects",
               "Coverage gaps", "Distribution note"):
         assert f"## {h}" in out
     assert L.SECTION_8_MARKER in out
-    assert "GBC-BTN-2026-002" in out and "Gelephu Mindfulness City Authority" in out
+    assert "GBC-BTN-2026-002" in out and "Example City Authority" in out
     assert "No adverse media items meeting the identity-resolution criteria were returned" in out
     assert L.lint_report(out, recs) == []
 
@@ -42,7 +42,7 @@ def test_findings_cite_confirmed_only_and_possible_go_to_limitations(cases_dir):
         retrieved=NOW, retrieval_status="full", identity="confirmed_subject", corroborator="role: councillor, Brisbane",
         legal_status="regulatory_action", source_type="wire", summary="A fine was imposed."))
     mp["media_items"].append(new_media_item(
-        title="Different Mark Phillips arrested", publisher="Tabloid", published="2020-01-01", url="https://tab.example/2",
+        title="Different Alex Example arrested", publisher="Tabloid", published="2020-01-01", url="https://tab.example/2",
         retrieved=NOW, retrieval_status="snippet_only", identity="possible_subject", corroborator=None,
         legal_status="charged", source_type="low_accountability"))
     out = RP.render(c, recs, NOW)
@@ -69,7 +69,7 @@ def test_layer_c_everywhere_drops_section_8_and_cites_scan_ids(cases_dir):
 def test_watchlist_candidates_listed_as_unreviewed(cases_dir):
     c = build_case(cases_dir)
     recs = [c.record(s) for s in c.slugs()]
-    recs[1]["watchlist_candidates"].append({"source": "opensanctions", "id": "Q1", "caption": "Mark Philips", "score": 0.74,
+    recs[1]["watchlist_candidates"].append({"source": "opensanctions", "id": "Q1", "caption": "Alex Exampel", "score": 0.74,
                                            "topics": ["role.pep"], "datasets": ["au_pep"], "entity": None,
                                            "assessment": "unreviewed", "proposed_disposition": "likely different person: different state"})
     out = RP.render(c, recs, NOW)
@@ -135,7 +135,7 @@ def test_layer_c_matches_and_vendor_media_are_rendered(cases_dir):
         r["layer_c"] = {"provider": "namescan", "tier": "sapphire", "scan_id": "ps-1", "number_of_matches": None,
                         "adverse_media": "ok", "credits_consumed": 1.25, "reused_prior_scan": False,
                         "test_mode": False, "scan_date": NOW, "match_rate_floor": 75,
-                        "matches": [{"name": "Mark Phillips", "match_rate": 88, "category": "PEP",
+                        "matches": [{"name": "Alex Example", "match_rate": 88, "category": "PEP",
                                      "matched_fields": "Name, DOB",
                                      "official_lists": [{"keyword": "Australian PEP", "is_current": True},
                                                         {"keyword": "EU Sanctions", "is_current": False}]}],
@@ -145,7 +145,7 @@ def test_layer_c_matches_and_vendor_media_are_rendered(cases_dir):
                                                   "link": "https://news.example/1"}]}
     out = RP.render(c, recs, NOW)
     findings = L.report_section(out, "Findings")
-    assert ("Mark Phillips — match rate 88, category PEP, matched on Name, DOB; "
+    assert ("Alex Example — match rate 88, category PEP, matched on Name, DOB; "
             "lists: Australian PEP (current) / EU Sanctions (not current) — assessment: unreviewed") in findings
     assert "Vendor adverse-media items (NameScan, not resolved to the subject by this system): 1" in findings
     assert "Council fined over procurement — Example News, 2024-06-01 https://news.example/1" in findings
@@ -157,7 +157,7 @@ def test_layer_c_matches_and_vendor_media_are_rendered(cases_dir):
 def test_dispositioned_watchlist_candidate_renders_and_counts_in_bottom_line(cases_dir):
     c = build_case(cases_dir)
     recs = [c.record(s) for s in c.slugs()]
-    recs[1]["watchlist_candidates"].append({"source": "opensanctions", "id": "Q1", "caption": "Mark Philips",
+    recs[1]["watchlist_candidates"].append({"source": "opensanctions", "id": "Q1", "caption": "Alex Exampel",
                                              "score": 0.74, "topics": ["role.pep"], "datasets": ["au_pep"],
                                              "entity": None, "assessment": "false_positive",
                                              "proposed_disposition": None, "dispositioned_by": "Jane Analyst",
@@ -181,7 +181,7 @@ def test_layer_c_match_disposition_renders(cases_dir):
     r["layer_c"] = {"provider": "namescan", "tier": "sapphire", "scan_id": "ps-1", "number_of_matches": 1,
                     "adverse_media": "ok", "credits_consumed": 1.25, "reused_prior_scan": False,
                     "test_mode": False, "scan_date": NOW, "match_rate_floor": 75,
-                    "matches": [{"name": "Mark Phillips", "match_rate": 88, "category": "PEP",
+                    "matches": [{"name": "Alex Example", "match_rate": 88, "category": "PEP",
                                  "matched_fields": "Name", "official_lists": [],
                                  "assessment": "true_match", "dispositioned_by": "Jane Analyst",
                                  "dispositioned_at": "2026-09-14T09:00:00+00:00", "disposition_note": None}],
@@ -211,8 +211,8 @@ def test_alias_scan_rendered_under_layer_c(cases_dir):
                     "adverse_media": "ok", "credits_consumed": 1.25, "reused_prior_scan": False,
                     "test_mode": False, "scan_date": NOW, "match_rate_floor": 75, "matches": [],
                     "advanced_media_items": [],
-                    "alias_scans": [{"alias": "M. Phillips", "scan_id": "ps-2", "number_of_matches": 1,
-                                     "matches": [{"name": "M Phillips", "match_rate": 80, "category": "PEP",
+                    "alias_scans": [{"alias": "A. Example", "scan_id": "ps-2", "number_of_matches": 1,
+                                     "matches": [{"name": "A Example", "match_rate": 80, "category": "PEP",
                                                   "matched_fields": "Name", "official_lists": [],
                                                   "assessment": "unreviewed", "dispositioned_by": None,
                                                   "dispositioned_at": None, "disposition_note": None}],
@@ -220,8 +220,8 @@ def test_alias_scan_rendered_under_layer_c(cases_dir):
                                      "reused_prior_scan": False, "test_mode": False}]}
     out = RP.render(c, recs, NOW)
     findings = L.report_section(out, "Findings")
-    assert "Alias scan 'M. Phillips': scan ps-2, 1 match(es)" in findings
-    assert "candidate: M Phillips — match rate 80" in findings
+    assert "Alias scan 'A. Example': scan ps-2, 1 match(es)" in findings
+    assert "candidate: A Example — match rate 80" in findings
     assert L.lint_report(out, recs) == []
 
 

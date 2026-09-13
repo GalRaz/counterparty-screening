@@ -8,7 +8,7 @@
       "matchedFields": "Name",
       "category": "PEP",
       "person": {
-        "name": "Mark Phillips",
+        "name": "Alex Example",
         "officialLists": [{"keyword": "Australian PEP", "isCurrent": true}],
         "roles": [{"title": "Councillor", "since": "2019"}],
         "nationalities": ["Australia"],

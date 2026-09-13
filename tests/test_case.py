@@ -8,10 +8,10 @@ from tests.conftest import NOW
 
 
 def test_create_and_load(cases_dir):
-    c = Case.create(cases_dir, "GBC-BTN-2026-002", "GMC Authority", NOW)
+    c = Case.create(cases_dir, "GBC-BTN-2026-002", "Example Authority", NOW)
     assert (cases_dir / "GBC-BTN-2026-002" / "meta.json").exists()
     again = Case.load(cases_dir, "GBC-BTN-2026-002")
-    assert again.commissioning_party == "GMC Authority"
+    assert again.commissioning_party == "Example Authority"
     with pytest.raises(FileExistsError):
         Case.create(cases_dir, "GBC-BTN-2026-002", "x", NOW)
     with pytest.raises(FileNotFoundError):

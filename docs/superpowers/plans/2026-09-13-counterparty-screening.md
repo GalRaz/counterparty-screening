@@ -333,12 +333,12 @@ def test_slug_and_key_normalise_whitespace_and_case():
 
 
 def test_key_includes_dob_for_person_and_registration_for_org():
-    p = Subject(type="person", name="Mark Phillips",
+    p = Subject(type="person", name="Alex Example",
                 identifiers=[Identifier("dob", "1970", "passport copy")])
-    assert p.normalised_key() == "person:mark phillips:dob=1970"
-    o = Subject(type="organization", name="Carbon Capital Corporation Pty Ltd",
-                identifiers=[Identifier("registration_number", "32 667 478 471", "ASIC extract")])
-    assert o.normalised_key() == "organization:carbon capital corporation pty ltd:reg=32667478471"
+    assert p.normalised_key() == "person:alex example:dob=1970"
+    o = Subject(type="organization", name="Example Carbon Pty Ltd",
+                identifiers=[Identifier("registration_number", "12 345 678 901", "ASIC extract")])
+    assert o.normalised_key() == "organization:example carbon pty ltd:reg=12345678901"
 
 
 def test_all_names_includes_aliases_deduped():
@@ -352,7 +352,7 @@ def test_non_latin_detection():
 
 
 def test_split_person_name():
-    assert Subject(type="person", name="Mark Laurence Allington").split_person_name() == ("Mark", "Laurence", "Allington")
+    assert Subject(type="person", name="Jane Alice Example").split_person_name() == ("Jane", "Alice", "Example")
     assert Subject(type="person", name="Madonna").split_person_name() == ("", "", "Madonna")
 
 
@@ -549,15 +549,15 @@ from tests.conftest import NOW
 
 
 def make_subject():
-    return Subject(type="person", name="Mark Phillips", jurisdiction="AU",
+    return Subject(type="person", name="Alex Example", jurisdiction="AU",
                    identifiers=[Identifier("dob", "1970", "passport copy")])
 
 
 def test_new_record_shape():
-    rec = R.new_record(make_subject(), "GBC-BTN-2026-002", "GMC Authority", NOW)
+    rec = R.new_record(make_subject(), "GBC-BTN-2026-002", "Example Authority", NOW)
     assert rec["engagement"] == "GBC-BTN-2026-002"
-    assert rec["commissioning_party"] == "GMC Authority"
-    assert rec["subject"]["slug"] == "mark-phillips"
+    assert rec["commissioning_party"] == "Example Authority"
+    assert rec["subject"]["slug"] == "alex-example"
     assert rec["subject"]["identifiers_supplied"] == ["dob=1970"]
     assert rec["subject"]["identifier_sources"] == ["dob: passport copy"]
     assert rec["human_review_required"] is True
@@ -757,10 +757,10 @@ from tests.conftest import NOW
 
 
 def test_create_and_load(cases_dir):
-    c = Case.create(cases_dir, "GBC-BTN-2026-002", "GMC Authority", NOW)
+    c = Case.create(cases_dir, "GBC-BTN-2026-002", "Example Authority", NOW)
     assert (cases_dir / "GBC-BTN-2026-002" / "meta.json").exists()
     again = Case.load(cases_dir, "GBC-BTN-2026-002")
-    assert again.commissioning_party == "GMC Authority"
+    assert again.commissioning_party == "Example Authority"
     with pytest.raises(FileExistsError):
         Case.create(cases_dir, "GBC-BTN-2026-002", "x", NOW)
     with pytest.raises(FileNotFoundError):
@@ -923,9 +923,9 @@ T400 = "2027-02-05T00:00:00+00:00"
 
 def test_find_scan_within_window_only(tmp_path):
     with Store(tmp_path / "s.db") as s:
-        s.record_scan("person:mark phillips", "scan-1", "namescan", "person", T0)
-        assert s.find_scan("person:mark phillips", 90, T89) == "scan-1"
-        assert s.find_scan("person:mark phillips", 90, T91) is None
+        s.record_scan("person:alex example", "scan-1", "namescan", "person", T0)
+        assert s.find_scan("person:alex example", 90, T89) == "scan-1"
+        assert s.find_scan("person:alex example", 90, T91) is None
         assert s.find_scan("person:someone else", 90, T89) is None
 
 
@@ -1402,7 +1402,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
       "matchedFields": "Name",
       "category": "PEP",
       "person": {
-        "name": "Mark Phillips",
+        "name": "Alex Example",
         "officialLists": [{"keyword": "Australian PEP", "isCurrent": true}],
         "roles": [{"title": "Councillor", "since": "2019"}],
         "nationalities": ["Australia"],
@@ -1459,12 +1459,12 @@ LATER = "2026-10-01T10:00:00+00:00"
 
 
 def person():
-    return Subject(type="person", name="Mark Phillips", jurisdiction="AU",
+    return Subject(type="person", name="Alex Example", jurisdiction="AU",
                    identifiers=[Identifier("dob", "1970", "passport copy")])
 
 
 def org():
-    return Subject(type="organization", name="Green Bond Corporation", jurisdiction="LU",
+    return Subject(type="organization", name="Example Bond Corporation", jurisdiction="LU",
                    identifiers=[Identifier("registration_number", "B123456", "RCS extract")])
 
 
@@ -1498,9 +1498,9 @@ def client_for(handler, **kw):
 
 
 def test_person_body_only_uses_sourced_fields():
-    s = Subject(type="person", name="Mark Laurence Allington", jurisdiction="GB")
+    s = Subject(type="person", name="Jane Alice Example", jurisdiction="GB")
     body = NS.build_person_body(s, include_media=True)
-    assert body == {"firstName": "Mark", "middleName": "Laurence", "lastName": "Allington",
+    assert body == {"firstName": "Jane", "middleName": "Alice", "lastName": "Example",
                     "exact": False, "matchRate": 75, "maxResultCount": 100, "includeAdvancedMedia": True}
     assert "country" not in body  # jurisdiction is NOT a sourced identifier (§7.5)
 
@@ -1518,7 +1518,7 @@ def test_person_body_with_sourced_attributes_and_original_name():
 
 def test_org_body():
     assert NS.build_org_body(org(), include_media=True) == {
-        "name": "Green Bond Corporation", "registrationNumber": "B123456",
+        "name": "Example Bond Corporation", "registrationNumber": "B123456",
         "exact": False, "matchRate": 75, "maxResultCount": 100, "includeAdvancedMedia": True}
 
 
@@ -1935,11 +1935,11 @@ def test_match_with_media_not_requested_is_full():
 
 
 def test_query_plan_full_builds_concrete_queries():
-    s = Subject(type="person", name="Mark Phillips", aliases=["M. Phillips"], jurisdiction="AU")
+    s = Subject(type="person", name="Alex Example", aliases=["A. Example"], jurisdiction="AU")
     plan = M.query_plan(s, M.select(None), ["en"])
     fam = {f["family"]: f for f in plan["families"]}
-    assert '"Mark Phillips"' in fam[1]["queries"] and '"M. Phillips"' in fam[1]["queries"]
-    assert '"Mark Phillips" fraud' in fam[3]["queries"]
+    assert '"Alex Example"' in fam[1]["queries"] and '"A. Example"' in fam[1]["queries"]
+    assert '"Alex Example" fraud' in fam[3]["queries"]
     assert len(fam[3]["queries"]) == len(M.RISK_TERMS) * 2
     assert fam[2]["queries"] is None and "employer" in fam[2]["instruction"]
     assert fam[4]["queries"] is None and "AU" in fam[4]["instruction"]
@@ -1947,7 +1947,7 @@ def test_query_plan_full_builds_concrete_queries():
 
 
 def test_query_plan_reduced_limits_families_and_window():
-    s = Subject(type="person", name="Mark Phillips")
+    s = Subject(type="person", name="Alex Example")
     plan = M.query_plan(s, M.select(lc(number_of_matches=1, adverse_media="ok")), ["en", "dz"])
     assert [f["family"] for f in plan["families"]] == [3, 4, 5]
     assert "24 months" in [f for f in plan["families"] if f["family"] == 3][0]["instruction"]
@@ -2075,13 +2075,13 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
   "data": [
     {
       "type": "lei-records",
-      "id": "984500765B652F3C6A05",
+      "id": "TESTLEI0000000000001",
       "attributes": {
-        "lei": "984500765B652F3C6A05",
+        "lei": "TESTLEI0000000000001",
         "entity": {
-          "legalName": {"name": "CARBON CAPITAL CORPORATION PTY LTD", "language": "en"},
+          "legalName": {"name": "EXAMPLE CARBON PTY LTD", "language": "en"},
           "legalAddress": {"addressLines": ["LEVEL 12, 60 CARRINGTON STREET"], "city": "SYDNEY", "country": "AU", "postalCode": "2000"},
-          "registeredAs": "667 478 471",
+          "registeredAs": "345 678 901",
           "jurisdiction": "AU",
           "status": "ACTIVE"
         },
@@ -2096,8 +2096,8 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 ```json
 {"items": [
-  {"title": "JEARRARD ENERGY RESOURCES LTD", "company_number": "13647702", "company_status": "active"},
-  {"title": "JEARRARD ENERGY HOLDINGS LTD", "company_number": "99999999", "company_status": "active"}
+  {"title": "EXAMPLE ENERGY LTD", "company_number": "00012345", "company_status": "active"},
+  {"title": "EXAMPLE ENERGY HOLDINGS LTD", "company_number": "99999999", "company_status": "active"}
 ]}
 ```
 
@@ -2105,14 +2105,14 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 ```json
 {
-  "company_name": "JEARRARD ENERGY RESOURCES LTD",
-  "company_number": "13647702",
+  "company_name": "EXAMPLE ENERGY LTD",
+  "company_number": "00012345",
   "company_status": "active",
   "date_of_creation": "2021-09-28",
   "type": "ltd",
   "sic_codes": ["71121"],
   "accounts": {"next_due": "2026-06-30", "overdue": true, "last_accounts": {"type": "micro-entity", "made_up_to": "2024-09-30"}},
-  "registered_office_address": {"address_line_1": "1 Marybrook Street", "locality": "Berkeley", "postal_code": "GL13 9AA"}
+  "registered_office_address": {"address_line_1": "1 Example Street", "locality": "Exampletown", "postal_code": "EX1 1AA"}
 }
 ```
 
@@ -2120,8 +2120,8 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 ```json
 {"items": [
-  {"name": "ALLINGTON, Mark Laurence", "officer_role": "director", "appointed_on": "2021-09-28", "nationality": "British", "country_of_residence": "England"},
-  {"name": "OBERHOLZER, Jan", "officer_role": "director", "appointed_on": "2024-02-15", "resigned_on": "2025-01-20", "nationality": "South African"}
+  {"name": "EXAMPLE, Jane Alice", "officer_role": "director", "appointed_on": "2021-09-28", "nationality": "British", "country_of_residence": "England"},
+  {"name": "SAMPLE, Sam", "officer_role": "director", "appointed_on": "2024-02-15", "resigned_on": "2025-01-20", "nationality": "South African"}
 ]}
 ```
 
@@ -2142,12 +2142,12 @@ from tests.conftest import NOW, json_response, load_fixture, mock_client
 
 
 def ccc():
-    return Subject(type="organization", name="Carbon Capital Corporation Pty Ltd", jurisdiction="AU",
-                   identifiers=[Identifier("lei", "984500765B652F3C6A05", "GLEIF search by user")])
+    return Subject(type="organization", name="Example Carbon Pty Ltd", jurisdiction="AU",
+                   identifiers=[Identifier("lei", "TESTLEI0000000000001", "GLEIF search by user")])
 
 
 def jer():
-    return Subject(type="organization", name="Jearrard Energy Resources Ltd", jurisdiction="GB")
+    return Subject(type="organization", name="Example Energy Ltd", jurisdiction="GB")
 
 
 def gleif_handler(req: httpx.Request):
@@ -2160,9 +2160,9 @@ def ch_handler(req: httpx.Request):
     assert auth == "Basic " + base64.b64encode(b"CHKEY:").decode()
     if req.url.path == "/search/companies":
         return json_response(200, load_fixture("ch_search.json"))
-    if req.url.path == "/company/13647702":
+    if req.url.path == "/company/00012345":
         return json_response(200, load_fixture("ch_profile.json"))
-    if req.url.path == "/company/13647702/officers":
+    if req.url.path == "/company/00012345/officers":
         return json_response(200, load_fixture("ch_officers.json"))
     raise AssertionError(req.url)
 
@@ -2175,10 +2175,10 @@ def test_gleif_by_lei_filter_and_normalisation():
         return gleif_handler(req)
 
     recs = RG.gleif_lookup(ccc(), mock_client(handler, GLEIF_BASE))
-    assert seen["params"] == {"filter[lei]": "984500765B652F3C6A05"}
+    assert seen["params"] == {"filter[lei]": "TESTLEI0000000000001"}
     assert recs == [{
-        "lei": "984500765B652F3C6A05", "legal_name": "CARBON CAPITAL CORPORATION PTY LTD",
-        "status": "ACTIVE", "jurisdiction": "AU", "registered_as": "667 478 471",
+        "lei": "TESTLEI0000000000001", "legal_name": "EXAMPLE CARBON PTY LTD",
+        "status": "ACTIVE", "jurisdiction": "AU", "registered_as": "345 678 901",
         "address": {"lines": ["LEVEL 12, 60 CARRINGTON STREET"], "city": "SYDNEY", "country": "AU"},
         "registration_status": "ISSUED"}]
 
@@ -2191,26 +2191,26 @@ def test_gleif_by_name_when_no_lei():
         return gleif_handler(req)
 
     RG.gleif_lookup(jer(), mock_client(handler, GLEIF_BASE))
-    assert seen["params"] == {"filter[entity.legalName]": "Jearrard Energy Resources Ltd", "page[size]": "10"}
+    assert seen["params"] == {"filter[entity.legalName]": "Example Energy Ltd", "page[size]": "10"}
 
 
 def test_companies_house_search_requires_exact_title():
     rec = RG.companies_house_lookup(jer(), mock_client(ch_handler, COMPANIES_HOUSE_BASE), "CHKEY")
-    assert rec["company_number"] == "13647702"
+    assert rec["company_number"] == "00012345"
     assert rec["status"] == "active" and rec["incorporated"] == "2021-09-28"
     assert rec["accounts"] == {"next_due": "2026-06-30", "overdue": True}
     assert rec["sic_codes"] == ["71121"]
-    assert [o["name"] for o in rec["officers"]] == ["ALLINGTON, Mark Laurence", "OBERHOLZER, Jan"]
+    assert [o["name"] for o in rec["officers"]] == ["EXAMPLE, Jane Alice", "SAMPLE, Sam"]
     assert rec["officers"][1]["resigned_on"] == "2025-01-20"
 
 
 def test_companies_house_no_exact_match_returns_none():
-    s = Subject(type="organization", name="Jearrard Energy", jurisdiction="GB")
+    s = Subject(type="organization", name="Example Energy", jurisdiction="GB")
     assert RG.companies_house_lookup(s, mock_client(ch_handler, COMPANIES_HOUSE_BASE), "CHKEY") is None
 
 
 def test_companies_house_uses_number_identifier_directly():
-    s = Subject(type="organization", name="whatever", identifiers=[Identifier("uk_company_number", "13647702", "user")])
+    s = Subject(type="organization", name="whatever", identifiers=[Identifier("uk_company_number", "00012345", "user")])
     paths = []
 
     def handler(req):
@@ -2225,13 +2225,13 @@ def test_run_layer_d_proposes_active_officers_only():
     res = RG.run_layer_d(jer(), gleif_client=mock_client(lambda r: json_response(200, {"data": []}), GLEIF_BASE),
                          ch_client=mock_client(ch_handler, COMPANIES_HOUSE_BASE), ch_api_key="CHKEY", now=NOW)
     assert res.check["status"] == "ok"
-    assert res.proposed_subjects == [{"name": "Mark Laurence Allington", "type": "person",
-                                      "reason": "active director of Jearrard Energy Resources Ltd",
-                                      "source": "Companies House officers list, company 13647702"}]
+    assert res.proposed_subjects == [{"name": "Jane Alice Example", "type": "person",
+                                      "reason": "active director of Example Energy Ltd",
+                                      "source": "Companies House officers list, company 00012345"}]
     rec = new_record(jer(), "E", "P", NOW)
     res.apply(rec)
-    assert rec["layer_d"]["companies_house"]["company_number"] == "13647702"
-    assert rec["proposed_subjects"][0]["name"] == "Mark Laurence Allington"
+    assert rec["layer_d"]["companies_house"]["company_number"] == "00012345"
+    assert rec["proposed_subjects"][0]["name"] == "Jane Alice Example"
 
 
 def test_run_layer_d_person_is_not_run():
@@ -2468,7 +2468,7 @@ from tests.conftest import NOW
 
 
 def rec(**over):
-    r = new_record(Subject(type="person", name="Mark Phillips"), "E", "P", NOW)
+    r = new_record(Subject(type="person", name="Alex Example"), "E", "P", NOW)
     r.update(over)
     return r
 
@@ -2512,7 +2512,7 @@ def test_media_items_need_layer_b_close():
     r = rec(media_items=[item()])
     assert "media_without_layer_b_check" in rules(L.lint_record(r))
     r["checks_run"].append({"layer": "B", "provider": "web_search", "mode": "full", "status": "ok",
-                            "queries_run": ['"Mark Phillips"'], "languages": ["en"], "timestamp": NOW})
+                            "queries_run": ['"Alex Example"'], "languages": ["en"], "timestamp": NOW})
     assert "media_without_layer_b_check" not in rules(L.lint_record(r))
 
 
@@ -2526,9 +2526,9 @@ def test_possible_subject_not_in_findings():
 
 def test_legal_status_words_must_match_record():
     r = rec(media_items=[item(identity="confirmed_subject", corroborator="x", legal_status="allegation")])
-    report = "## Findings\nMr Phillips was convicted of fraud.\n"
+    report = "## Findings\nMr Example was convicted of fraud.\n"
     assert "legal_status_mismatch" in rules(L.lint_report(report, [r]))
-    report = "## Findings\nMr Phillips was accused of fraud (allegation).\n"
+    report = "## Findings\nMr Example was accused of fraud (allegation).\n"
     assert "legal_status_mismatch" not in rules(L.lint_report(report, [r]))
 
 
@@ -2703,9 +2703,9 @@ from tests.conftest import NOW
 
 
 def build_case(cases_dir):
-    c = Case.create(cases_dir, "GBC-BTN-2026-002", "Gelephu Mindfulness City Authority", NOW)
+    c = Case.create(cases_dir, "GBC-BTN-2026-002", "Example City Authority", NOW)
     c.add_subject(Subject(type="organization", name="Acme Pte Ltd", jurisdiction="SG"), NOW)
-    c.add_subject(Subject(type="person", name="Mark Phillips", jurisdiction="AU"), NOW)
+    c.add_subject(Subject(type="person", name="Alex Example", jurisdiction="AU"), NOW)
     return c
 
 
@@ -2716,13 +2716,13 @@ def test_render_has_sections_and_section_8_when_no_layer_c(cases_dir):
         r["checks_run"].append({"layer": "A", "provider": "opensanctions", "status": "ok", "timestamp": NOW,
                                 "dataset": "default", "algorithm": "best", "threshold": 0.7, "limit": 10})
         r["checks_run"].append({"layer": "B", "provider": "web_search", "mode": "full", "mode_reason": "x",
-                                "queries_run": ['"Mark Phillips"'], "languages": ["en"], "status": "ok", "timestamp": NOW})
+                                "queries_run": ['"Alex Example"'], "languages": ["en"], "status": "ok", "timestamp": NOW})
     out = RP.render(c, recs, NOW)
     for h in ("Bottom line", "What was screened", "Limitations", "Findings", "Proposed additional subjects",
               "Coverage gaps", "Distribution note"):
         assert f"## {h}" in out
     assert L.SECTION_8_MARKER in out
-    assert "GBC-BTN-2026-002" in out and "Gelephu Mindfulness City Authority" in out
+    assert "GBC-BTN-2026-002" in out and "Example City Authority" in out
     assert "No adverse media items meeting the identity-resolution criteria were returned" in out
     assert L.lint_report(out, recs) == []
 
@@ -2738,7 +2738,7 @@ def test_findings_cite_confirmed_only_and_possible_go_to_limitations(cases_dir):
         retrieved=NOW, retrieval_status="full", identity="confirmed_subject", corroborator="role: councillor, Brisbane",
         legal_status="regulatory_action", source_type="wire", summary="A fine was imposed."))
     mp["media_items"].append(new_media_item(
-        title="Different Mark Phillips arrested", publisher="Tabloid", published="2020-01-01", url="https://tab.example/2",
+        title="Different Alex Example arrested", publisher="Tabloid", published="2020-01-01", url="https://tab.example/2",
         retrieved=NOW, retrieval_status="snippet_only", identity="possible_subject", corroborator=None,
         legal_status="charged", source_type="low_accountability"))
     out = RP.render(c, recs, NOW)
@@ -2765,7 +2765,7 @@ def test_layer_c_everywhere_drops_section_8_and_cites_scan_ids(cases_dir):
 def test_watchlist_candidates_listed_as_unreviewed(cases_dir):
     c = build_case(cases_dir)
     recs = [c.record(s) for s in c.slugs()]
-    recs[1]["watchlist_candidates"].append({"source": "opensanctions", "id": "Q1", "caption": "Mark Philips", "score": 0.74,
+    recs[1]["watchlist_candidates"].append({"source": "opensanctions", "id": "Q1", "caption": "Alex Exampel", "score": 0.74,
                                            "topics": ["role.pep"], "datasets": ["au_pep"], "entity": None,
                                            "assessment": "unreviewed", "proposed_disposition": "likely different person: different state"})
     out = RP.render(c, recs, NOW)
@@ -3030,7 +3030,7 @@ def wired(monkeypatch, cases_dir):
     def ch_handler(req):
         if req.url.path == "/search/companies":
             return json_response(200, load_fixture("ch_search.json"))
-        if req.url.path == "/company/13647702":
+        if req.url.path == "/company/00012345":
             return json_response(200, load_fixture("ch_profile.json"))
         return json_response(200, load_fixture("ch_officers.json"))
 
@@ -3050,16 +3050,16 @@ def run(*argv, stdin=None, monkeypatch=None, capsys=None):
 
 
 def setup_case(capsys, monkeypatch):
-    assert run("case", "new", "E1", "--commissioning-party", "GMC Authority", capsys=capsys)[0] == 0
-    assert run("subject", "add", "E1", "--type", "organization", "--name", "Jearrard Energy Resources Ltd",
+    assert run("case", "new", "E1", "--commissioning-party", "Example Authority", capsys=capsys)[0] == 0
+    assert run("subject", "add", "E1", "--type", "organization", "--name", "Example Energy Ltd",
                "--jurisdiction", "GB", capsys=capsys)[0] == 0
-    assert run("subject", "add", "E1", "--type", "person", "--name", "Mark Phillips", "--jurisdiction", "AU",
-               "--id", "dob=1970@passport copy", "--alias", "M. Phillips", capsys=capsys)[0] == 0
+    assert run("subject", "add", "E1", "--type", "person", "--name", "Alex Example", "--jurisdiction", "AU",
+               "--id", "dob=1970@passport copy", "--alias", "A. Example", capsys=capsys)[0] == 0
 
 
 def test_case_and_subject_commands(capsys, monkeypatch, wired):
     setup_case(capsys, monkeypatch)
-    assert (wired / "E1" / "mark-phillips" / "record.json").exists()
+    assert (wired / "E1" / "alex-example" / "record.json").exists()
     code, out = run("subject", "add", "E1", "--type", "person", "--name", "X", "--id", "dob=1970", capsys=capsys)
     assert code == 1 and "kind=value@source" in out.err
 
@@ -3069,23 +3069,23 @@ def test_run_a_c_d_and_record_show(capsys, monkeypatch, wired):
     assert run("run", "A", "E1", capsys=capsys)[0] == 0
     assert run("run", "C", "E1", capsys=capsys)[0] == 0
     assert run("run", "D", "E1", capsys=capsys)[0] == 0
-    code, out = run("record", "show", "E1", "mark-phillips", capsys=capsys)
+    code, out = run("record", "show", "E1", "alex-example", capsys=capsys)
     rec = json.loads(out.out)
     assert [c["layer"] for c in rec["checks_run"]] == ["A", "C", "D"]
     assert rec["layer_c"]["scan_id"] == "ps-abc123"
-    assert rec["layer_c"]["authorised_by"] == "GMC Authority"
+    assert rec["layer_c"]["authorised_by"] == "Example Authority"
     assert len(rec["watchlist_candidates"]) == 2
-    code, out = run("record", "show", "E1", "jearrard-energy-resources-ltd", capsys=capsys)
+    code, out = run("record", "show", "E1", "example-energy-ltd", capsys=capsys)
     rec = json.loads(out.out)
-    assert rec["layer_d"]["companies_house"]["company_number"] == "13647702"
-    assert rec["proposed_subjects"][0]["name"] == "Mark Laurence Allington"
+    assert rec["layer_d"]["companies_house"]["company_number"] == "00012345"
+    assert rec["proposed_subjects"][0]["name"] == "Jane Alice Example"
 
 
 def test_run_c_test_key_flag(capsys, monkeypatch, wired):
     setup_case(capsys, monkeypatch)
-    code, out = run("run", "C", "E1", "--subject", "mark-phillips", "--test", capsys=capsys)
+    code, out = run("run", "C", "E1", "--subject", "alex-example", "--test", capsys=capsys)
     assert code == 0
-    rec = json.loads(run("record", "show", "E1", "mark-phillips", capsys=capsys)[1].out)
+    rec = json.loads(run("record", "show", "E1", "alex-example", capsys=capsys)[1].out)
     assert rec["layer_c"]["test_mode"] is True and rec["layer_c"]["credits_consumed"] == 0.0
 
 
@@ -3095,7 +3095,7 @@ def test_run_c_missing_key_exits_4(capsys, monkeypatch, wired):
     monkeypatch.setattr(cli.config, "get_secret", lambda name: None)
     code, out = run("run", "C", "E1", capsys=capsys)
     assert code == 4 and "NAMESCAN_API_KEY" in out.err
-    rec = json.loads(run("record", "show", "E1", "mark-phillips", capsys=capsys)[1].out)
+    rec = json.loads(run("record", "show", "E1", "alex-example", capsys=capsys)[1].out)
     assert rec["checks_run"][0]["layer"] == "C" and rec["checks_run"][0]["status"] == "not_run"
 
 
@@ -3109,19 +3109,19 @@ def test_run_c_ceiling_exit_3(capsys, monkeypatch, wired):
 def test_mode_media_layerb_close_and_report(capsys, monkeypatch, wired):
     setup_case(capsys, monkeypatch)
     run("run", "A", "E1", capsys=capsys)
-    code, out = run("mode", "E1", "mark-phillips", "--languages", "en", capsys=capsys)
+    code, out = run("mode", "E1", "alex-example", "--languages", "en", capsys=capsys)
     plan = json.loads(out.out)
     assert plan["mode"] == "full" and plan["families"][0]["family"] == 1
 
     item = {"title": "Councillor fined", "publisher": "Example News", "published": "2024-06-01",
             "url": "https://news.example/1", "retrieval_status": "full", "identity": "confirmed_subject",
             "corroborator": "role: councillor", "legal_status": "regulatory_action", "source_type": "wire",
-            "query": '"Mark Phillips" fine', "language": "en", "summary": "A fine was imposed."}
-    code, out = run("media", "add", "E1", "mark-phillips", stdin=json.dumps(item), monkeypatch=monkeypatch, capsys=capsys)
+            "query": '"Alex Example" fine', "language": "en", "summary": "A fine was imposed."}
+    code, out = run("media", "add", "E1", "alex-example", stdin=json.dumps(item), monkeypatch=monkeypatch, capsys=capsys)
     assert code == 0
 
     bad = {**item, "identity": "confirmed_subject", "corroborator": None}
-    code, out = run("media", "add", "E1", "mark-phillips", stdin=json.dumps(bad), monkeypatch=monkeypatch, capsys=capsys)
+    code, out = run("media", "add", "E1", "alex-example", stdin=json.dumps(bad), monkeypatch=monkeypatch, capsys=capsys)
     assert code == 1 and "corroborator" in out.err
 
     # report before layerb close: lint fails
@@ -3130,14 +3130,14 @@ def test_mode_media_layerb_close_and_report(capsys, monkeypatch, wired):
     assert not (wired / "E1" / "summary.md").exists()
 
     qf = wired / "queries.txt"
-    qf.write_text('"Mark Phillips"\n"Mark Phillips" fraud\n')
-    code, out = run("layerb", "close", "E1", "mark-phillips", "--mode", "full", "--queries-file", str(qf),
+    qf.write_text('"Alex Example"\n"Alex Example" fraud\n')
+    code, out = run("layerb", "close", "E1", "alex-example", "--mode", "full", "--queries-file", str(qf),
                     "--languages", "en", capsys=capsys)
     assert code == 0
     # the org subject has no Layer B; close it as well with zero media
     qf2 = wired / "q2.txt"
-    qf2.write_text('"Jearrard Energy Resources Ltd"\n')
-    assert run("layerb", "close", "E1", "jearrard-energy-resources-ltd", "--mode", "full", "--queries-file", str(qf2),
+    qf2.write_text('"Example Energy Ltd"\n')
+    assert run("layerb", "close", "E1", "example-energy-ltd", "--mode", "full", "--queries-file", str(qf2),
                "--languages", "en", capsys=capsys)[0] == 0
 
     code, out = run("report", "E1", capsys=capsys)
@@ -3150,9 +3150,9 @@ def test_mode_media_layerb_close_and_report(capsys, monkeypatch, wired):
 def test_registry_add_manual_finding(capsys, monkeypatch, wired):
     setup_case(capsys, monkeypatch)
     f = {"registry": "ACRA", "url": "https://www.bizfile.gov.sg/x", "fields": {"status": "Live"}, "note": "agent lookup"}
-    code, out = run("registry", "add", "E1", "jearrard-energy-resources-ltd", stdin=json.dumps(f), monkeypatch=monkeypatch, capsys=capsys)
+    code, out = run("registry", "add", "E1", "example-energy-ltd", stdin=json.dumps(f), monkeypatch=monkeypatch, capsys=capsys)
     assert code == 0
-    rec = json.loads(run("record", "show", "E1", "jearrard-energy-resources-ltd", capsys=capsys)[1].out)
+    rec = json.loads(run("record", "show", "E1", "example-energy-ltd", capsys=capsys)[1].out)
     assert rec["layer_d"]["manual_findings"][0]["registry"] == "ACRA"
     assert rec["layer_d"]["manual_findings"][0]["retrieved"] == NOW
 
@@ -3607,10 +3607,10 @@ For each nominated subject, decide `person` or `organization`, collect every nam
 you were given, and record identifiers **with sources**:
 
 ```bash
-.venv/bin/screen subject add <ID> --type person --name "Mark Phillips" --alias "M. Phillips" \
-  --jurisdiction AU --role "director, Carbon Capital Corporation" --id "dob=1970@passport copy in email 2026-08-01"
-.venv/bin/screen subject add <ID> --type organization --name "Carbon Capital Corporation Pty Ltd" \
-  --jurisdiction AU --id "lei=984500765B652F3C6A05@GLEIF search" --id "registration_number=32 667 478 471@ASIC extract"
+.venv/bin/screen subject add <ID> --type person --name "Alex Example" --alias "A. Example" \
+  --jurisdiction AU --role "director, Example Carbon" --id "dob=1970@passport copy in email 2026-08-01"
+.venv/bin/screen subject add <ID> --type organization --name "Example Carbon Pty Ltd" \
+  --jurisdiction AU --id "lei=TESTLEI0000000000001@GLEIF search" --id "registration_number=12 345 678 901@ASIC extract"
 ```
 
 Identifier kinds: `dob`, `country`, `gender`, `registration_number`, `tax_number`, `lei`,
@@ -3655,7 +3655,7 @@ For each result that might concern the subject:
 ```bash
 echo '{"title":"...","publisher":"...","published":"2024-06-01","url":"https://...","retrieval_status":"full",
 "identity":"possible_subject","corroborator":null,"legal_status":"allegation","source_type":"wire",
-"query":"\"Mark Phillips\" fraud","language":"en","summary":"<your own words, one or two sentences>"}' \
+"query":"\"Alex Example\" fraud","language":"en","summary":"<your own words, one or two sentences>"}' \
   | .venv/bin/screen media add <ID> <slug>
 ```
 
@@ -3747,7 +3747,7 @@ In Claude Code, from this directory: `/screen` and name the engagement and subje
 `.claude/skills/screen/SKILL.md` walks the procedure. Or drive the CLI directly:
 
 ```bash
-.venv/bin/screen case new GBC-BTN-2026-002 --commissioning-party "Gelephu Mindfulness City Authority"
+.venv/bin/screen case new GBC-BTN-2026-002 --commissioning-party "Example City Authority"
 .venv/bin/screen subject add GBC-BTN-2026-002 --type organization --name "Acme Pte Ltd" --jurisdiction SG
 .venv/bin/screen run A GBC-BTN-2026-002
 .venv/bin/screen run C GBC-BTN-2026-002
@@ -3835,7 +3835,7 @@ def wired(monkeypatch, cases_dir):
     def ch_handler(req):
         if req.url.path == "/search/companies":
             return json_response(200, load_fixture("ch_search.json"))
-        if req.url.path == "/company/13647702":
+        if req.url.path == "/company/00012345":
             return json_response(200, load_fixture("ch_profile.json"))
         return json_response(200, load_fixture("ch_officers.json"))
 
@@ -3850,41 +3850,41 @@ def test_full_flow(wired, monkeypatch, capsys):
     import io
     E = "E2E-2026-001"
     assert cli.main(["case", "new", E, "--commissioning-party", "Test Authority"]) == 0
-    assert cli.main(["subject", "add", E, "--type", "organization", "--name", "Jearrard Energy Resources Ltd", "--jurisdiction", "GB"]) == 0
-    assert cli.main(["subject", "add", E, "--type", "person", "--name", "Mark Phillips", "--jurisdiction", "AU"]) == 0
+    assert cli.main(["subject", "add", E, "--type", "organization", "--name", "Example Energy Ltd", "--jurisdiction", "GB"]) == 0
+    assert cli.main(["subject", "add", E, "--type", "person", "--name", "Alex Example", "--jurisdiction", "AU"]) == 0
     assert cli.main(["run", "A", E]) == 0
     assert cli.main(["run", "C", E]) == 0
     assert cli.main(["run", "D", E]) == 0
 
     # Person had a Layer C match with media -> reduced mode
-    cli.main(["mode", E, "mark-phillips", "--languages", "en"])
+    cli.main(["mode", E, "alex-example", "--languages", "en"])
     plan = json.loads(capsys.readouterr().out)
     assert plan["mode"] == "reduced"
     # Org had zero matches -> full mode
-    cli.main(["mode", E, "jearrard-energy-resources-ltd", "--languages", "en"])
+    cli.main(["mode", E, "example-energy-ltd", "--languages", "en"])
     assert json.loads(capsys.readouterr().out)["mode"] == "full"
 
     q = wired / "q.txt"
-    q.write_text('"Mark Phillips" fraud\n')
+    q.write_text('"Alex Example" fraud\n')
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({
         "title": "Councillor fined over procurement", "publisher": "Example News", "published": "2024-06-01",
         "url": "https://news.example/1", "retrieval_status": "full", "identity": "confirmed_subject",
         "corroborator": "role: councillor; Layer C profile lists same role", "legal_status": "regulatory_action",
-        "source_type": "wire", "query": '"Mark Phillips" fine', "language": "en", "summary": "A council fine was reported."})))
-    assert cli.main(["media", "add", E, "mark-phillips"]) == 0
-    assert cli.main(["layerb", "close", E, "mark-phillips", "--mode", "reduced", "--queries-file", str(q), "--languages", "en"]) == 0
-    assert cli.main(["layerb", "close", E, "jearrard-energy-resources-ltd", "--mode", "full", "--queries-file", str(q), "--languages", "en"]) == 0
+        "source_type": "wire", "query": '"Alex Example" fine', "language": "en", "summary": "A council fine was reported."})))
+    assert cli.main(["media", "add", E, "alex-example"]) == 0
+    assert cli.main(["layerb", "close", E, "alex-example", "--mode", "reduced", "--queries-file", str(q), "--languages", "en"]) == 0
+    assert cli.main(["layerb", "close", E, "example-energy-ltd", "--mode", "full", "--queries-file", str(q), "--languages", "en"]) == 0
 
     assert cli.main(["report", E]) == 0
     text = (wired / E / "summary.md").read_text()
     assert "This is not a commercial screening product" not in text  # Layer C ran for all
     assert "ps-abc123" in text and "os-def456" in text
-    assert "Mark Laurence Allington" in text  # proposed, not screened
+    assert "Jane Alice Example" in text  # proposed, not screened
     assert "Councillor fined over procurement" in text
     assert "regulatory_action" in text
     assert "assessment: unreviewed" in text
     assert cli.main(["lint", E]) == 0
-    rec = json.loads((wired / E / "mark-phillips" / "record.json").read_text())
+    rec = json.loads((wired / E / "alex-example" / "record.json").read_text())
     assert rec["human_review_required"] is True
     assert rec["layer_c"]["authorised_by"] == "Test Authority"
 ```

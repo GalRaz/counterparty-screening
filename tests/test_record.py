@@ -4,15 +4,15 @@ from tests.conftest import NOW
 
 
 def make_subject():
-    return Subject(type="person", name="Mark Phillips", jurisdiction="AU",
+    return Subject(type="person", name="Alex Example", jurisdiction="AU",
                    identifiers=[Identifier("dob", "1970", "passport copy")])
 
 
 def test_new_record_shape():
-    rec = R.new_record(make_subject(), "GBC-BTN-2026-002", "GMC Authority", NOW)
+    rec = R.new_record(make_subject(), "GBC-BTN-2026-002", "Example Authority", NOW)
     assert rec["engagement"] == "GBC-BTN-2026-002"
-    assert rec["commissioning_party"] == "GMC Authority"
-    assert rec["subject"]["slug"] == "mark-phillips"
+    assert rec["commissioning_party"] == "Example Authority"
+    assert rec["subject"]["slug"] == "alex-example"
     assert rec["subject"]["identifiers_supplied"] == ["dob=1970"]
     assert rec["subject"]["identifier_sources"] == ["dob: passport copy"]
     assert rec["human_review_required"] is True
@@ -98,7 +98,7 @@ def test_validate_rejects_dispositioned_by_whitespace_only_as_undispositioned():
 def test_validate_layer_c_match_disposition():
     rec = R.new_record(make_subject(), "E", "P", NOW)
     rec["layer_c"] = {"scan_id": "ps-1", "matches": [
-        {"name": "Mark Phillips", "assessment": "unreviewed", "dispositioned_by": None,
+        {"name": "Alex Example", "assessment": "unreviewed", "dispositioned_by": None,
          "dispositioned_at": None, "disposition_note": None},
         {"name": "Someone Else", "assessment": "true_match", "dispositioned_by": "Jane Analyst",
          "dispositioned_at": NOW, "disposition_note": None},

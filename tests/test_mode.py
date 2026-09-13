@@ -32,11 +32,11 @@ def test_match_with_media_not_requested_is_full():
 
 
 def test_query_plan_full_builds_concrete_queries():
-    s = Subject(type="person", name="Mark Phillips", aliases=["M. Phillips"], jurisdiction="AU")
+    s = Subject(type="person", name="Alex Example", aliases=["A. Example"], jurisdiction="AU")
     plan = M.query_plan(s, M.select(None), ["en"])
     fam = {f["family"]: f for f in plan["families"]}
-    assert '"Mark Phillips"' in fam[1]["queries"] and '"M. Phillips"' in fam[1]["queries"]
-    assert '"Mark Phillips" fraud' in fam[3]["queries"]
+    assert '"Alex Example"' in fam[1]["queries"] and '"A. Example"' in fam[1]["queries"]
+    assert '"Alex Example" fraud' in fam[3]["queries"]
     assert len(fam[3]["queries"]) == len(M.RISK_TERMS) * 2
     assert fam[2]["queries"] is None and "employer" in fam[2]["instruction"]
     assert fam[4]["queries"] is None and "AU" in fam[4]["instruction"]
@@ -44,7 +44,7 @@ def test_query_plan_full_builds_concrete_queries():
 
 
 def test_query_plan_reduced_limits_families_and_window():
-    s = Subject(type="person", name="Mark Phillips")
+    s = Subject(type="person", name="Alex Example")
     plan = M.query_plan(s, M.select(lc(number_of_matches=1, adverse_media="ok")), ["en", "dz"])
     assert [f["family"] for f in plan["families"]] == [3, 4, 5]
     assert "24 months" in [f for f in plan["families"] if f["family"] == 3][0]["instruction"]

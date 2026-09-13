@@ -10,9 +10,9 @@ T400 = "2027-02-05T00:00:00+00:00"
 
 def test_find_scan_within_window_only(tmp_path):
     with Store(tmp_path / "s.db") as s:
-        s.record_scan("person:mark phillips", "scan-1", "namescan", "person", T0)
-        assert s.find_scan("person:mark phillips", 90, T89) == "scan-1"
-        assert s.find_scan("person:mark phillips", 90, T91) is None
+        s.record_scan("person:alex example", "scan-1", "namescan", "person", T0)
+        assert s.find_scan("person:alex example", 90, T89) == "scan-1"
+        assert s.find_scan("person:alex example", 90, T91) is None
         assert s.find_scan("person:someone else", 90, T89) is None
 
 

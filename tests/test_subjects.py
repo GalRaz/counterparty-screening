@@ -25,12 +25,12 @@ def test_slug_and_key_normalise_whitespace_and_case():
 
 
 def test_key_includes_dob_for_person_and_registration_for_org():
-    p = Subject(type="person", name="Mark Phillips",
+    p = Subject(type="person", name="Alex Example",
                 identifiers=[Identifier("dob", "1970", "passport copy")])
-    assert p.normalised_key() == "person:mark phillips:dob=1970"
-    o = Subject(type="organization", name="Carbon Capital Corporation Pty Ltd",
-                identifiers=[Identifier("registration_number", "32 667 478 471", "ASIC extract")])
-    assert o.normalised_key() == "organization:carbon capital corporation pty ltd:reg=32667478471"
+    assert p.normalised_key() == "person:alex example:dob=1970"
+    o = Subject(type="organization", name="Example Carbon Pty Ltd",
+                identifiers=[Identifier("registration_number", "12 345 678 901", "ASIC extract")])
+    assert o.normalised_key() == "organization:example carbon pty ltd:reg=12345678901"
 
 
 def test_all_names_includes_aliases_deduped():
@@ -44,7 +44,7 @@ def test_non_latin_detection():
 
 
 def test_split_person_name():
-    assert Subject(type="person", name="Mark Laurence Allington").split_person_name() == ("Mark", "Laurence", "Allington")
+    assert Subject(type="person", name="Jane Alice Example").split_person_name() == ("Jane", "Alice", "Example")
     assert Subject(type="person", name="Madonna").split_person_name() == ("", "", "Madonna")
 
 

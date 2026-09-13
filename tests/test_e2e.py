@@ -32,7 +32,7 @@ def wired(monkeypatch, cases_dir):
     def ch_handler(req):
         if req.url.path == "/search/companies":
             return json_response(200, load_fixture("ch_search.json"))
-        if req.url.path == "/company/13647702":
+        if req.url.path == "/company/00012345":
             return json_response(200, load_fixture("ch_profile.json"))
         return json_response(200, load_fixture("ch_officers.json"))
 
@@ -47,41 +47,41 @@ def test_full_flow(wired, monkeypatch, capsys):
     import io
     E = "E2E-2026-001"
     assert cli.main(["case", "new", E, "--commissioning-party", "Test Authority"]) == 0
-    assert cli.main(["subject", "add", E, "--type", "organization", "--name", "Jearrard Energy Resources Ltd", "--jurisdiction", "GB"]) == 0
-    assert cli.main(["subject", "add", E, "--type", "person", "--name", "Mark Phillips", "--jurisdiction", "AU"]) == 0
+    assert cli.main(["subject", "add", E, "--type", "organization", "--name", "Example Energy Ltd", "--jurisdiction", "GB"]) == 0
+    assert cli.main(["subject", "add", E, "--type", "person", "--name", "Alex Example", "--jurisdiction", "AU"]) == 0
     assert cli.main(["run", "A", E]) == 0
     assert cli.main(["run", "C", E]) == 0
     assert cli.main(["run", "D", E]) == 0
 
     capsys.readouterr()  # discard accumulated stdout from case/subject/run so mode's JSON parses cleanly
     # Person had a Layer C match with media -> reduced mode
-    cli.main(["mode", E, "mark-phillips", "--languages", "en"])
+    cli.main(["mode", E, "alex-example", "--languages", "en"])
     plan = json.loads(capsys.readouterr().out)
     assert plan["mode"] == "reduced"
     # Org had zero matches -> full mode
-    cli.main(["mode", E, "jearrard-energy-resources-ltd", "--languages", "en"])
+    cli.main(["mode", E, "example-energy-ltd", "--languages", "en"])
     assert json.loads(capsys.readouterr().out)["mode"] == "full"
 
     q = wired / "q.txt"
-    q.write_text('"Mark Phillips" fraud\n')
+    q.write_text('"Alex Example" fraud\n')
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({
         "title": "Councillor fined over procurement", "publisher": "Example News", "published": "2024-06-01",
         "url": "https://news.example/1", "retrieval_status": "full", "identity": "confirmed_subject",
         "corroborator": "role: councillor; Layer C profile lists same role", "legal_status": "regulatory_action",
-        "source_type": "wire", "query": '"Mark Phillips" fine', "language": "en", "summary": "A council fine was reported."})))
-    assert cli.main(["media", "add", E, "mark-phillips"]) == 0
-    assert cli.main(["layerb", "close", E, "mark-phillips", "--mode", "reduced", "--queries-file", str(q), "--languages", "en"]) == 0
-    assert cli.main(["layerb", "close", E, "jearrard-energy-resources-ltd", "--mode", "full", "--queries-file", str(q), "--languages", "en"]) == 0
+        "source_type": "wire", "query": '"Alex Example" fine', "language": "en", "summary": "A council fine was reported."})))
+    assert cli.main(["media", "add", E, "alex-example"]) == 0
+    assert cli.main(["layerb", "close", E, "alex-example", "--mode", "reduced", "--queries-file", str(q), "--languages", "en"]) == 0
+    assert cli.main(["layerb", "close", E, "example-energy-ltd", "--mode", "full", "--queries-file", str(q), "--languages", "en"]) == 0
 
     assert cli.main(["report", E]) == 0
     text = (wired / E / "summary.md").read_text()
     assert "This is not a commercial screening product" not in text  # Layer C ran for all
     assert "ps-abc123" in text and "os-def456" in text
-    assert "Mark Laurence Allington" in text  # proposed, not screened
+    assert "Jane Alice Example" in text  # proposed, not screened
     assert "Councillor fined over procurement" in text
     assert "regulatory_action" in text
     assert "assessment: unreviewed" in text
     assert cli.main(["lint", E]) == 0
-    rec = json.loads((wired / E / "mark-phillips" / "record.json").read_text())
+    rec = json.loads((wired / E / "alex-example" / "record.json").read_text())
     assert rec["human_review_required"] is True
     assert rec["layer_c"]["authorised_by"] == "Test Authority"

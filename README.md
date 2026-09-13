@@ -39,7 +39,7 @@ In Claude Code, from this directory: `/screen` and name the engagement and subje
 `.claude/skills/screen/SKILL.md` walks the procedure. Or drive the CLI directly:
 
 ```bash
-.venv/bin/screen case new GBC-BTN-2026-002 --commissioning-party "Gelephu Mindfulness City Authority"
+.venv/bin/screen case new GBC-BTN-2026-002 --commissioning-party "Example City Authority"
 .venv/bin/screen subject add GBC-BTN-2026-002 --type organization --name "Acme Pte Ltd" --jurisdiction SG
 .venv/bin/screen run A GBC-BTN-2026-002
 .venv/bin/screen run C GBC-BTN-2026-002

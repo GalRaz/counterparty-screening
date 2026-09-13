@@ -5,7 +5,7 @@ from tests.conftest import NOW
 
 
 def rec(**over):
-    r = new_record(Subject(type="person", name="Mark Phillips"), "E", "P", NOW)
+    r = new_record(Subject(type="person", name="Alex Example"), "E", "P", NOW)
     r.update(over)
     return r
 
@@ -49,7 +49,7 @@ def test_media_items_need_layer_b_close():
     r = rec(media_items=[item()])
     assert "media_without_layer_b_check" in rules(L.lint_record(r))
     r["checks_run"].append({"layer": "B", "provider": "web_search", "mode": "full", "status": "ok",
-                            "queries_run": ['"Mark Phillips"'], "languages": ["en"], "timestamp": NOW})
+                            "queries_run": ['"Alex Example"'], "languages": ["en"], "timestamp": NOW})
     assert "media_without_layer_b_check" not in rules(L.lint_record(r))
 
 
@@ -63,9 +63,9 @@ def test_possible_subject_not_in_findings():
 
 def test_legal_status_words_must_match_record():
     r = rec(media_items=[item(identity="confirmed_subject", corroborator="x", legal_status="allegation")])
-    report = "## Findings\nMr Phillips was convicted of fraud.\n"
+    report = "## Findings\nMr Example was convicted of fraud.\n"
     assert "legal_status_mismatch" in rules(L.lint_report(report, [r]))
-    report = "## Findings\nMr Phillips was accused of fraud (allegation).\n"
+    report = "## Findings\nMr Example was accused of fraud (allegation).\n"
     assert "legal_status_mismatch" not in rules(L.lint_report(report, [r]))
 
 
@@ -86,7 +86,7 @@ def test_report_section_extraction():
 
 def test_legal_status_word_not_justified_by_possible_subject():
     r = rec(media_items=[item(identity="possible_subject", legal_status="convicted")])
-    report = "## Findings\nMr Phillips was convicted of fraud.\n"
+    report = "## Findings\nMr Example was convicted of fraud.\n"
     assert "legal_status_mismatch" in rules(L.lint_report(report, [r]))
     # Verify the violation message contains the word "convicted" not "onvicted"
     vs = L.lint_report(report, [r])
@@ -139,7 +139,7 @@ def test_record_scans_corroborator_query_and_media_disposition():
     r = rec(media_items=[item(identity="confirmed_subject",
                               corroborator="role match; otherwise the subject is clear")])
     assert "forbidden_phrase" in rules(L.lint_record(r))
-    assert "forbidden_phrase" in rules(L.lint_record(rec(media_items=[item(query='"Mark Phillips" no risk')])))
+    assert "forbidden_phrase" in rules(L.lint_record(rec(media_items=[item(query='"Alex Example" no risk')])))
     assert "forbidden_phrase" in rules(L.lint_record(
         rec(media_items=[item(proposed_disposition="cleared")])))
 
@@ -180,7 +180,7 @@ def test_disposition_without_human_flags_watchlist_candidate():
 
 
 def test_disposition_without_human_flags_layer_c_match():
-    m = {"name": "Mark Phillips", "assessment": "false_positive", "dispositioned_by": "  ",
+    m = {"name": "Alex Example", "assessment": "false_positive", "dispositioned_by": "  ",
          "dispositioned_at": None, "disposition_note": None}
     r = rec(layer_c={"scan_id": "ps-1", "matches": [m]})
     assert "disposition_without_human" in rules(L.lint_record(r))
@@ -194,7 +194,7 @@ def test_disposition_note_scanned_for_forbidden_phrases():
          "disposition_note": "subject is clear, different DOB"}
     assert "forbidden_phrase" in rules(L.lint_record(rec(watchlist_candidates=[w])))
 
-    m = {"name": "Mark Phillips", "assessment": "true_match", "dispositioned_by": "Jane Analyst",
+    m = {"name": "Alex Example", "assessment": "true_match", "dispositioned_by": "Jane Analyst",
          "dispositioned_at": NOW, "disposition_note": "no risk here"}
     r = rec(layer_c={"scan_id": "ps-1", "matches": [m]})
     assert "forbidden_phrase" in rules(L.lint_record(r))
@@ -218,7 +218,7 @@ def test_record_does_not_scan_vendor_layer_c_names():
 def test_limitations_item_bullets_are_exempt_but_narrative_is_not():
     report = ("## Bottom line\nTwo subjects screened.\n\n"
               "## Limitations\n"
-              "- **Mark Phillips:** 1 unresolved media item(s), name match only:\n"
+              "- **Alex Example:** 1 unresolved media item(s), name match only:\n"
               "  - Clear Channel Holdings Ltd executive fined — Example News, 2024-06-01\n"
               "\n## Coverage gaps\n- none\n")
     assert "forbidden_phrase" not in rules(L.lint_report(report, [rec()]))
