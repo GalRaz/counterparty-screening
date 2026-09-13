@@ -289,6 +289,22 @@ def test_gap_add_records_a_coverage_gap(capsys, monkeypatch, wired):
     assert rec["coverage_gaps"] == ["no Dzongkha-language sources reachable"]
 
 
+def test_gap_rm_removes_by_index_and_rejects_out_of_range(capsys, monkeypatch, wired):
+    setup_case(capsys, monkeypatch)
+    code, out = run("gap", "add", "E1", "mark-phillips", "first gap", capsys=capsys)
+    assert code == 0
+    code, out = run("gap", "add", "E1", "mark-phillips", "second gap", capsys=capsys)
+    assert code == 0
+    rec = json.loads(run("record", "show", "E1", "mark-phillips", capsys=capsys)[1].out)
+    assert rec["coverage_gaps"] == ["first gap", "second gap"]
+    code, out = run("gap", "rm", "E1", "mark-phillips", "0", capsys=capsys)
+    assert code == 0 and "first gap" in out.out
+    rec = json.loads(run("record", "show", "E1", "mark-phillips", capsys=capsys)[1].out)
+    assert rec["coverage_gaps"] == ["second gap"]
+    code, out = run("gap", "rm", "E1", "mark-phillips", "5", capsys=capsys)
+    assert code == 1 and "out of range" in out.err
+
+
 def test_layerb_close_refuses_to_downgrade_full_to_reduced(capsys, monkeypatch, wired):
     setup_case(capsys, monkeypatch)
     qf = wired / "q.txt"

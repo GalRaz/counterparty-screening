@@ -174,6 +174,7 @@ not the linter. To drop an item you misclassified, remove it by its 0-based inde
 Removing an item shifts every later index down by one, so when dropping more than one item, remove
 the highest index first, or re-run `screen record show` between removals to re-read the current
 indices before the next `media rm`.
+A stale or superseded coverage gap can be removed the same way with `screen gap rm <ID> <slug> <index>` (indices from `record show`).
 
 Re-running `run A`, `run C` or `run D` replaces that layer's previous result; it never duplicates it.
 

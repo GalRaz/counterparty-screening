@@ -309,6 +309,19 @@ def cmd_gap_add(a) -> int:
     return EXIT_OK
 
 
+def cmd_gap_rm(a) -> int:
+    case = _case(a.engagement)
+    rec = case.record(a.slug)
+    gaps = rec["coverage_gaps"]
+    if not 0 <= a.index < len(gaps):
+        err(f"coverage_gaps index {a.index} out of range: {a.slug} has {len(gaps)} gap(s)")
+        return EXIT_ERR
+    gone = gaps.pop(a.index)
+    case.save_record(a.slug, rec)
+    print(f"{a.slug}: removed gap: {gone}")
+    return EXIT_OK
+
+
 def cmd_layerb_close(a) -> int:
     case = _case(a.engagement)
     rec = case.record(a.slug)
@@ -457,6 +470,8 @@ def build_parser() -> argparse.ArgumentParser:
     gp = sp.add_parser("gap").add_subparsers(dest="sub", required=True)
     ga = gp.add_parser("add"); ga.add_argument("engagement"); ga.add_argument("slug")
     ga.add_argument("text", help="what could not be checked, in the agent's own words"); ga.set_defaults(fn=cmd_gap_add)
+    gr = gp.add_parser("rm"); gr.add_argument("engagement"); gr.add_argument("slug")
+    gr.add_argument("index", type=int, help="0-based index into coverage_gaps"); gr.set_defaults(fn=cmd_gap_rm)
 
     lb = sp.add_parser("layerb").add_subparsers(dest="sub", required=True)
     lc = lb.add_parser("close"); lc.add_argument("engagement"); lc.add_argument("slug")
