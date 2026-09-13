@@ -109,3 +109,18 @@ def test_sparse_layer_d_never_renders_none(cases_dir):
     out = RP.render(c, recs, NOW)
     assert "None" not in out
     assert L.lint_report(out, recs) == []
+
+
+def test_test_key_layer_c_keeps_section_8_and_is_declared(cases_dir):
+    c = build_case(cases_dir)
+    recs = [c.record(s) for s in c.slugs()]
+    for i, r in enumerate(recs):
+        r["checks_run"].append({"layer": "C", "provider": "namescan", "tier": "sapphire", "status": "ok",
+                                "timestamp": NOW, "attempts": 1})
+        r["layer_c"] = {"provider": "namescan", "tier": "sapphire", "scan_id": f"scan-{i}", "number_of_matches": 0,
+                        "adverse_media": "not_requested", "credits_consumed": 0.0, "reused_prior_scan": False,
+                        "matches": [], "advanced_media_items": [], "test_mode": True, "scan_date": NOW}
+    out = RP.render(c, recs, NOW)
+    assert L.SECTION_8_MARKER in out
+    assert "Layer C was run with the NameScan TEST key for 2 subject(s): no real coverage, no credits spent." in out
+    assert L.lint_report(out, recs) == []

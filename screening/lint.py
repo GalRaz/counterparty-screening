@@ -34,6 +34,19 @@ def report_section(report: str, heading: str) -> str:
     return m.group(1) if m else ""
 
 
+def agent_prose(report: str) -> str:
+    """The parts of a report the agent wrote, for §6.1 scanning.
+
+    Vendor-supplied text is data, not prose: a candidate captioned "Clear Channel Holdings Ltd"
+    must not read as a verdict. So scan `Bottom line`, `Limitations` and `Coverage gaps` in full,
+    and in `Findings` only the narrative lines — every candidate/vendor bullet there starts with
+    `- ` or `  - ` and is exempt.
+    """
+    parts = [report_section(report, h) for h in ("Bottom line", "Limitations", "Coverage gaps")]
+    parts += [l for l in report_section(report, "Findings").splitlines() if not l.lstrip().startswith("- ")]
+    return "\n".join(parts)
+
+
 def _forbidden(text: str, where: str) -> list[Violation]:
     out = []
     for pat in FORBIDDEN_PHRASES:
@@ -50,6 +63,9 @@ def lint_record(record: dict) -> list[Violation]:
         prose += " " + json.dumps({k: m.get(k) for k in ("summary", "proposed_disposition")}, ensure_ascii=False)
     for w in record["watchlist_candidates"]:
         prose += " " + json.dumps(w.get("proposed_disposition"), ensure_ascii=False)
+    for c in record["checks_run"]:
+        if c.get("layer") == "B" and c.get("mode_reason"):
+            prose += " " + json.dumps(c["mode_reason"], ensure_ascii=False)
     vs += _forbidden(prose, f"{slug}/record.json")
 
     for i, m in enumerate(record["media_items"]):
@@ -64,6 +80,12 @@ def lint_record(record: dict) -> list[Violation]:
                                 f"checks_run[{i}] (layer {c['layer']}) failed but no coverage gap names Layer {c['layer']} (§6.7)",
                                 f"{slug}/record.json"))
 
+    layers = [c.get("layer") for c in record["checks_run"]]
+    for layer in sorted({l for l in layers if l is not None and layers.count(l) > 1}):
+        vs.append(Violation("duplicate_layer_check",
+                            f"{layers.count(layer)} checks_run entries for layer {layer}; re-running a layer must "
+                            "replace the previous entry, not add to it", f"{slug}/record.json"))
+
     if record["media_items"] and not any(c.get("layer") == "B" for c in record["checks_run"]):
         vs.append(Violation("media_without_layer_b_check",
                             "media_items present but no Layer B checks_run entry; run `screen layerb close`", f"{slug}/record.json"))
@@ -71,12 +93,18 @@ def lint_record(record: dict) -> list[Violation]:
 
 
 def _layer_c_ok(record: dict) -> bool:
-    return record.get("layer_c") is not None and any(
+    """True only when real commercial screening happened. A test-key scan buys no coverage (§8)."""
+    lc = record.get("layer_c")
+    return lc is not None and lc.get("test_mode") is not True and any(
         c.get("layer") == "C" and c.get("status") == "ok" for c in record["checks_run"])
 
 
+def _test_mode(record: dict) -> bool:
+    return (record.get("layer_c") or {}).get("test_mode") is True
+
+
 def lint_report(report: str, records: list[dict]) -> list[Violation]:
-    vs = _forbidden(report, "summary.md")
+    vs = _forbidden(agent_prose(report), "summary.md")
     findings = report_section(report, "Findings")
 
     for r in records:
@@ -96,6 +124,10 @@ def lint_report(report: str, records: list[dict]) -> list[Violation]:
 
     if not all(_layer_c_ok(r) for r in records) and SECTION_8_MARKER not in report:
         vs.append(Violation("missing_section_8", "Layer C did not succeed for every subject; §8 limitation paragraph required", "summary.md"))
+    if any(_test_mode(r) for r in records) and SECTION_8_MARKER not in report:
+        vs.append(Violation("test_mode_without_section_8",
+                            "Layer C ran with the NameScan test key for at least one subject; that is no coverage, "
+                            "so the §8 limitation paragraph is required", "summary.md"))
     return vs
 
 

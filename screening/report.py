@@ -74,6 +74,9 @@ def render(case: Case, records: list[dict], now: str) -> str:
         w(_section_8(records, now) + "\n")
     else:
         w("Commercial screening (NameScan Sapphire) was run for every subject; scan IDs are listed per subject below.\n")
+    n_test = sum(1 for r in records if (r.get("layer_c") or {}).get("test_mode") is True)
+    if n_test:
+        w(f"Layer C was run with the NameScan TEST key for {n_test} subject(s): no real coverage, no credits spent.\n")
 
     w("## What was screened\n")
     w("| Subject | Type | Layer A (OpenSanctions) | Layer C (NameScan) | Layer B (web search) | Layer D (registries) |")

@@ -97,3 +97,39 @@ def test_legal_status_word_not_justified_by_possible_subject():
 def test_whitespace_corroborator_is_missing():
     r = rec(media_items=[item(identity="confirmed_subject", corroborator="  ")])
     assert "confirmed_without_corroborator" in rules(L.lint_record(r))
+
+
+def test_test_key_layer_c_does_not_satisfy_section_8():
+    r = rec(layer_c={"scan_id": "ps-1", "adverse_media": "not_requested", "test_mode": True})
+    r["checks_run"].append({"layer": "C", "provider": "namescan", "status": "ok", "timestamp": NOW})
+    assert L._layer_c_ok(r) is False
+    assert "missing_section_8" in rules(L.lint_report("## Bottom line\nx\n", [r]))
+    assert "test_mode_without_section_8" in rules(L.lint_report("## Bottom line\nx\n", [r]))
+    ok = f"## Bottom line\n{L.SECTION_8_MARKER}.\n"
+    assert rules(L.lint_report(ok, [r])) == []
+
+
+def test_duplicate_layer_check_is_a_violation():
+    r = rec(checks_run=[{"layer": "A", "provider": "opensanctions", "status": "ok", "timestamp": NOW},
+                        {"layer": "A", "provider": "opensanctions", "status": "ok", "timestamp": NOW}])
+    assert "duplicate_layer_check" in rules(L.lint_record(r))
+    r["checks_run"].pop()
+    assert "duplicate_layer_check" not in rules(L.lint_record(r))
+
+
+def test_forbidden_phrase_ignores_vendor_quoted_candidate_lines():
+    report = ("## Bottom line\nTwo subjects screened.\n\n"
+              "## Findings\n"
+              "- `NK-1` Clear Channel Holdings Ltd — score 0.81, topics none, datasets x — assessment: unreviewed\n"
+              "  - candidate: Clear Water Trading — match rate 88, category PEP, lists none — assessment: unreviewed\n"
+              f"\n## Limitations\n\n## Coverage gaps\n- none\n")
+    assert "forbidden_phrase" not in rules(L.lint_report(report, [rec()]))
+    bad = report.replace("Two subjects screened.", "No risk found.")
+    assert "forbidden_phrase" in rules(L.lint_report(bad, [rec()]))
+
+
+def test_layer_b_mode_reason_is_scanned_for_forbidden_phrases():
+    r = rec(checks_run=[{"layer": "B", "provider": "web_search", "mode": "reduced",
+                         "mode_reason": "subject looked clear on Layer C", "queries_run": [],
+                         "languages": ["en"], "status": "ok", "timestamp": NOW}])
+    assert "forbidden_phrase" in rules(L.lint_record(r))
