@@ -150,3 +150,18 @@ def test_layer_c_matches_and_vendor_media_are_rendered(cases_dir):
     assert "unknown match(es)" in findings  # number_of_matches None never renders as None
     assert "None" not in out
     assert L.lint_report(out, recs) == []
+
+
+def test_vendor_titled_unresolved_item_under_limitations_does_not_trip_the_scan(cases_dir):
+    c = build_case(cases_dir)
+    recs = [c.record(s) for s in c.slugs()]
+    mp = recs[1]
+    mp["checks_run"].append({"layer": "B", "provider": "web_search", "mode": "full", "mode_reason": "x",
+                             "queries_run": [], "languages": ["en"], "status": "ok", "timestamp": NOW})
+    mp["media_items"].append(new_media_item(
+        title="Clear Channel Holdings Ltd executive fined", publisher="Example News", published="2024-06-01",
+        url="https://news.example/9", retrieved=NOW, retrieval_status="full", identity="possible_subject",
+        corroborator=None, legal_status="regulatory_action", source_type="wire"))
+    out = RP.render(c, recs, NOW)
+    assert "Clear Channel Holdings Ltd executive fined" in L.report_section(out, "Limitations")
+    assert not [v for v in L.lint_report(out, recs) if v.rule == "forbidden_phrase"]

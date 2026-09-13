@@ -133,3 +133,65 @@ def test_layer_b_mode_reason_is_scanned_for_forbidden_phrases():
                          "mode_reason": "subject looked clear on Layer C", "queries_run": [],
                          "languages": ["en"], "status": "ok", "timestamp": NOW}])
     assert "forbidden_phrase" in rules(L.lint_record(r))
+
+
+def test_record_scans_corroborator_query_and_media_disposition():
+    r = rec(media_items=[item(identity="confirmed_subject",
+                              corroborator="role match; otherwise the subject is clear")])
+    assert "forbidden_phrase" in rules(L.lint_record(r))
+    assert "forbidden_phrase" in rules(L.lint_record(rec(media_items=[item(query='"Mark Phillips" no risk')])))
+    assert "forbidden_phrase" in rules(L.lint_record(
+        rec(media_items=[item(proposed_disposition="cleared")])))
+
+
+def test_record_does_not_scan_transcribed_title_and_publisher():
+    r = rec(media_items=[item(title="Clear Channel executive fined", publisher="Clear Channel Wire")])
+    assert "forbidden_phrase" not in rules(L.lint_record(r))
+
+
+def test_record_scans_layer_d_manual_findings():
+    def ld(**over):
+        f = {"registry": "ACRA", "url": "https://x", "retrieved": NOW, "fields": {}, "note": None}
+        f.update(over)
+        return {"gleif": [], "companies_house": None, "manual_findings": [f]}
+
+    assert "forbidden_phrase" in rules(L.lint_record(rec(layer_d=ld(note="no risk"))))
+    assert "forbidden_phrase" in rules(L.lint_record(rec(layer_d=ld(fields={"status": "the subject is clear"}))))
+    assert "forbidden_phrase" in rules(L.lint_record(rec(layer_d=ld(registry="no risk registry"))))
+    assert "forbidden_phrase" not in rules(L.lint_record(rec(layer_d=ld(fields={"status": "Live"}))))
+
+
+def test_record_scans_proposed_subject_reason_and_source_not_name():
+    p = {"name": "Clear Channel Holdings Ltd", "type": "organization", "reason": "parent entity",
+         "source": "Companies House"}
+    assert "forbidden_phrase" not in rules(L.lint_record(rec(proposed_subjects=[p])))
+    assert "forbidden_phrase" in rules(L.lint_record(
+        rec(proposed_subjects=[{**p, "name": "X", "reason": "active director; no risk"}])))
+    assert "forbidden_phrase" in rules(L.lint_record(
+        rec(proposed_subjects=[{**p, "name": "X", "source": "a clear register"}])))
+
+
+def test_record_scans_watchlist_candidate_disposition_not_caption():
+    w = {"source": "opensanctions", "id": "Q1", "caption": "Clear Channel Holdings Ltd", "score": 0.9,
+         "topics": [], "datasets": [], "assessment": "unreviewed"}
+    assert "forbidden_phrase" not in rules(L.lint_record(rec(watchlist_candidates=[w])))
+    assert "forbidden_phrase" in rules(L.lint_record(
+        rec(watchlist_candidates=[{**w, "caption": "c", "proposed_disposition": "no risk"}])))
+
+
+def test_record_does_not_scan_vendor_layer_c_names():
+    r = rec(layer_c={"scan_id": "ps-1", "adverse_media": "ok",
+                     "matches": [{"name": "Clear Channel Holdings Ltd"}],
+                     "advanced_media_items": [{"title": "Clear Channel executive fined"}]})
+    assert "forbidden_phrase" not in rules(L.lint_record(r))
+
+
+def test_limitations_item_bullets_are_exempt_but_narrative_is_not():
+    report = ("## Bottom line\nTwo subjects screened.\n\n"
+              "## Limitations\n"
+              "- **Mark Phillips:** 1 unresolved media item(s), name match only:\n"
+              "  - Clear Channel Holdings Ltd executive fined — Example News, 2024-06-01\n"
+              "\n## Coverage gaps\n- none\n")
+    assert "forbidden_phrase" not in rules(L.lint_report(report, [rec()]))
+    bad = report.replace("## Limitations\n", "## Limitations\nThe subject is clear.\n")
+    assert "forbidden_phrase" in rules(L.lint_report(bad, [rec()]))

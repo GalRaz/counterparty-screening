@@ -38,12 +38,13 @@ def agent_prose(report: str) -> str:
     """The parts of a report the agent wrote, for §6.1 scanning.
 
     Vendor-supplied text is data, not prose: a candidate captioned "Clear Channel Holdings Ltd"
-    must not read as a verdict. So scan `Bottom line`, `Limitations` and `Coverage gaps` in full,
-    and in `Findings` only the narrative lines — every candidate/vendor bullet there starts with
-    `- ` or `  - ` and is exempt.
+    must not read as a verdict. So scan `Bottom line` and `Coverage gaps` in full, and in
+    `Findings` and `Limitations` only the narrative lines — the candidate, vendor and unresolved-item
+    bullets in both sections start with `- ` or `  - ` and are exempt.
     """
-    parts = [report_section(report, h) for h in ("Bottom line", "Limitations", "Coverage gaps")]
-    parts += [l for l in report_section(report, "Findings").splitlines() if not l.lstrip().startswith("- ")]
+    parts = [report_section(report, h) for h in ("Bottom line", "Coverage gaps")]
+    for heading in ("Findings", "Limitations"):
+        parts += [l for l in report_section(report, heading).splitlines() if not l.lstrip().startswith("- ")]
     return "\n".join(parts)
 
 
@@ -55,18 +56,35 @@ def _forbidden(text: str, where: str) -> list[Violation]:
     return out
 
 
+def _agent_written(record: dict) -> str:
+    """Every field of the record the agent composed itself — the only places a verdict can be smuggled in.
+
+    Vendor- and web-derived strings are deliberately excluded: `watchlist_candidates[].caption`,
+    `layer_c.matches[].name` and `layer_c.advanced_media_items[].title` come back from a vendor, and a
+    media item's `title` and `publisher` are transcribed from the page it was taken from, so "Clear
+    Channel executive fined" is a citation, not a finding. The agent's own words about those items —
+    corroborator, summary, proposed_disposition, the query it ran — are scanned in full.
+    """
+    parts: list = [record.get("coverage_gaps") or []]
+    for m in record.get("media_items") or []:
+        parts.append({k: m.get(k) for k in ("corroborator", "summary", "proposed_disposition", "query")})
+    for w in record.get("watchlist_candidates") or []:
+        parts.append(w.get("proposed_disposition"))
+    for p in record.get("proposed_subjects") or []:
+        parts.append({k: p.get(k) for k in ("reason", "source")})
+    for c in record.get("checks_run") or []:
+        if c.get("layer") == "B" and c.get("mode_reason"):
+            parts.append(c["mode_reason"])
+    for f in ((record.get("layer_d") or {}).get("manual_findings") or []):
+        parts.append({"registry": f.get("registry"), "note": f.get("note")})
+        parts.append(list((f.get("fields") or {}).values()))
+    return json.dumps(parts, ensure_ascii=False)
+
+
 def lint_record(record: dict) -> list[Violation]:
     slug = record["subject"]["slug"]
     vs: list[Violation] = []
-    prose = json.dumps({k: record[k] for k in ("coverage_gaps", "proposed_subjects")}, ensure_ascii=False)
-    for m in record["media_items"]:
-        prose += " " + json.dumps({k: m.get(k) for k in ("summary", "proposed_disposition")}, ensure_ascii=False)
-    for w in record["watchlist_candidates"]:
-        prose += " " + json.dumps(w.get("proposed_disposition"), ensure_ascii=False)
-    for c in record["checks_run"]:
-        if c.get("layer") == "B" and c.get("mode_reason"):
-            prose += " " + json.dumps(c["mode_reason"], ensure_ascii=False)
-    vs += _forbidden(prose, f"{slug}/record.json")
+    vs += _forbidden(_agent_written(record), f"{slug}/record.json")
 
     for i, m in enumerate(record["media_items"]):
         if m.get("identity") == "confirmed_subject" and not (m.get("corroborator") or "").strip():
