@@ -77,7 +77,7 @@ a `mode_reason`, and the list of query families to run (§3.1). Printed for the 
 ### `screening/record.py`
 Builds the §5 JSON record. `assessment` and `relevance` are fixed at `unreviewed`; the agent may set
 `proposed_disposition` on any candidate. `layer_c` and `layer_d` are separate top-level fields —
-provenance is never merged. `human_review_required` is always `true`. Validated with a JSON schema.
+provenance is never merged. `human_review_required` is always `true`. Validated structurally by `record.validate()` (enums, protected fields, corroborator rule).
 
 ### `screening/lint.py`
 `lint(record, report_md) -> list[Violation]`. Rules:
