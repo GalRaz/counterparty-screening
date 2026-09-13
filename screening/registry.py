@@ -144,7 +144,8 @@ def run_layer_d(subject: Subject, *, gleif_client: httpx.Client | None, ch_clien
         except (httpx.HTTPError, KeyError, ValueError) as e:
             errors.append(f"companies_house: {type(e).__name__}")
             res.coverage_gaps.append(f"Layer D Companies House lookup failed: {type(e).__name__}")
-    elif not ch_api_key:
+    elif is_gb and not ch_api_key:
+        # Only a gap where Companies House was in scope: a non-GB org was never going to be there.
         res.coverage_gaps.append("Layer D Companies House not queried: no API key configured")
 
     res.layer_d = layer_d

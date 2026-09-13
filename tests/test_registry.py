@@ -112,7 +112,8 @@ def test_run_layer_d_all_sources_failed():
     res = RG.run_layer_d(ccc(), gleif_client=boom, ch_client=None, ch_api_key=None, now=NOW)
     assert res.check["status"] == "failed"
     assert any("gleif" in g.lower() for g in res.coverage_gaps)
-    assert any("companies house" in g.lower() and "no api key" in g.lower() for g in res.coverage_gaps)
+    # AU org: Companies House was never in scope, so its absence is not a gap
+    assert not any("companies house" in g.lower() for g in res.coverage_gaps)
 
 
 def test_non_gb_org_skips_companies_house_without_gap():
@@ -127,3 +128,10 @@ def test_manual_finding_shape():
                           fields={"status": "Live", "incorporated": "2023-04-01"}, note="looked up by agent")
     assert f == {"registry": "ACRA", "url": "https://www.bizfile.gov.sg/x", "retrieved": NOW,
                  "fields": {"status": "Live", "incorporated": "2023-04-01"}, "note": "looked up by agent"}
+
+
+def test_gb_org_without_key_records_the_companies_house_gap():
+    res = RG.run_layer_d(jer(), gleif_client=mock_client(gleif_handler, GLEIF_BASE),
+                         ch_client=None, ch_api_key=None, now=NOW)
+    assert res.check["status"] == "ok"
+    assert any("companies house" in g.lower() and "no api key" in g.lower() for g in res.coverage_gaps)

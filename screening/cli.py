@@ -337,7 +337,7 @@ def cmd_credits(a) -> int:
 
 def cmd_purge(a) -> int:
     with Store(store_path()) as st:
-        counts = st.purge(now(), config.VENDOR_TEXT_DAYS, config.RECORD_RETENTION_DAYS)
+        counts = st.purge(now(), config.VENDOR_TEXT_DAYS, config.RECORD_RETENTION_DAYS, root=config.cases_dir())
     print(json.dumps(counts))
     return EXIT_OK
 
