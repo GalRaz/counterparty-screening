@@ -335,6 +335,12 @@ def cmd_credits(a) -> int:
     return EXIT_OK
 
 
+def cmd_keys(a) -> int:
+    for name in config.SECRET_NAMES:
+        print(f"{name}: {'found' if config.get_secret(name) else 'missing'}")
+    return EXIT_OK
+
+
 def cmd_purge(a) -> int:
     with Store(store_path()) as st:
         counts = st.purge(now(), config.VENDOR_TEXT_DAYS, config.RECORD_RETENTION_DAYS, root=config.cases_dir())
@@ -389,6 +395,7 @@ def build_parser() -> argparse.ArgumentParser:
     li = sp.add_parser("lint"); li.add_argument("engagement"); li.set_defaults(fn=cmd_lint)
     cr = sp.add_parser("credits"); cr.add_argument("--test", action="store_true"); cr.set_defaults(fn=cmd_credits)
     pu = sp.add_parser("purge"); pu.set_defaults(fn=cmd_purge)
+    ky = sp.add_parser("keys"); ky.set_defaults(fn=cmd_keys)
     return p
 
 

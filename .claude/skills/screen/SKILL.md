@@ -38,10 +38,11 @@ CLI commands. Read `screening-tools-spec.md` §3, §6 and §7.1 before your firs
 
 ### 0. Set up
 
-**Prerequisites.** Before anything else, run `.venv/bin/screen credits` and confirm all four keys
-exist in the environment or Keychain: `OPENSANCTIONS_API_KEY`, `NAMESCAN_API_KEY`,
-`NAMESCAN_API_KEY_TEST`, `COMPANIES_HOUSE_API_KEY`. Tell the user which are missing and what that
-costs them (no Layer A, no Layer C, no Companies House) — never proceed silently on a partial set.
+**Prerequisites.** Before anything else, run `.venv/bin/screen keys`. Report any key listed
+`missing` to the user — and what that costs them (no Layer A, no Layer C, no Companies House) —
+before proceeding; never proceed silently on a partial set. If a NameScan key
+(`NAMESCAN_API_KEY` or `NAMESCAN_API_KEY_TEST`) is present, also run `.venv/bin/screen credits`
+to confirm there is balance left to spend.
 
 ```bash
 .venv/bin/screen case new <ENGAGEMENT-ID> --commissioning-party "<who is commissioning this>"
@@ -164,7 +165,13 @@ not the linter. To drop an item you misclassified, remove it by its 0-based inde
 .venv/bin/screen media rm <ID> <slug> 2
 ```
 
-Re-running `run A`, `run C` or `run D` replaces that layer's previous result; it never duplicates it. Then read `cases/<ID>/summary.md` and give the user a short account in chat: what was
+Removing an item shifts every later index down by one, so when dropping more than one item, remove
+the highest index first, or re-run `screen record show` between removals to re-read the current
+indices before the next `media rm`.
+
+Re-running `run A`, `run C` or `run D` replaces that layer's previous result; it never duplicates it.
+
+Then read `cases/<ID>/summary.md` and give the user a short account in chat: what was
 screened, how many candidates per subject, what remains unresolved, and what identifiers would sharpen a
 re-screen. Use the report's own phrasing for negatives. Do not add a verdict.
 

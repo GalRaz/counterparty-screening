@@ -158,6 +158,21 @@ def test_registry_add_manual_finding(capsys, monkeypatch, wired):
     assert rec["layer_d"]["manual_findings"][0]["retrieved"] == NOW
 
 
+def test_keys_reports_found_and_missing_without_printing_values(capsys, monkeypatch, wired):
+    def fake_get_secret(name):
+        return "sekret-value" if name in ("OPENSANCTIONS_API_KEY", "NAMESCAN_API_KEY_TEST") else None
+    monkeypatch.setattr(cli.config, "get_secret", fake_get_secret)
+    code, out = run("keys", capsys=capsys)
+    assert code == 0
+    assert out.out.splitlines() == [
+        "OPENSANCTIONS_API_KEY: found",
+        "NAMESCAN_API_KEY: missing",
+        "NAMESCAN_API_KEY_TEST: found",
+        "COMPANIES_HOUSE_API_KEY: missing",
+    ]
+    assert "sekret-value" not in out.out
+
+
 def test_credits_and_purge(capsys, monkeypatch, wired):
     code, out = run("credits", capsys=capsys)
     assert code == 0 and "78.5" in out.out
