@@ -1,0 +1,27 @@
+{
+  "responses": {
+    "q1": {
+      "status": 200,
+      "results": [
+        {
+          "id": "Q12345",
+          "caption": "Aleksandr Zacharov",
+          "schema": "Person",
+          "score": 0.91,
+          "match": true,
+          "datasets": ["us_ofac_sdn", "eu_fsf"],
+          "properties": {"topics": ["sanction"], "birthDate": ["1965-03-04"], "nationality": ["ru"]}
+        },
+        {
+          "id": "Q99999",
+          "caption": "Alexander Zakharov",
+          "schema": "Person",
+          "score": 0.72,
+          "match": true,
+          "datasets": ["ru_acf_bribetakers"],
+          "properties": {"topics": ["poi"]}
+        }
+      ]
+    }
+  }
+}

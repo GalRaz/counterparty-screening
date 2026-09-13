@@ -1,0 +1,12 @@
+{
+  "id": "Q12345",
+  "caption": "Aleksandr Zacharov",
+  "schema": "Person",
+  "datasets": ["us_ofac_sdn", "eu_fsf"],
+  "properties": {
+    "name": ["Aleksandr Zacharov"],
+    "birthDate": ["1965-03-04"],
+    "topics": ["sanction"],
+    "familyPerson": [{"id": "rel-1", "caption": "Spouse of Aleksandr Zacharov"}]
+  }
+}
