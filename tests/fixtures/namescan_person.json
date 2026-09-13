@@ -1,0 +1,31 @@
+{
+  "date": "2026-09-13T10:00:00",
+  "scanId": "ps-abc123",
+  "numberOfMatches": 1,
+  "persons": [
+    {
+      "matchRate": 88,
+      "matchedFields": "Name",
+      "category": "PEP",
+      "person": {
+        "name": "Mark Phillips",
+        "officialLists": [{"keyword": "Australian PEP", "isCurrent": true}],
+        "roles": [{"title": "Councillor", "since": "2019"}],
+        "nationalities": ["Australia"],
+        "locations": [{"country": "Australia"}],
+        "profileOfInterests": [],
+        "linkedIndividuals": [],
+        "linkedCompanies": [],
+        "sources": ["https://example.org/register"],
+        "disqualifiedDirectors": []
+      }
+    }
+  ],
+  "advancedMedia": [
+    {"title": "Council fined over procurement", "link": "https://news.example/1",
+     "sourceName": "Example News", "publishedDate": "2024-06-01T00:00:00",
+     "summary": "A council was fined.", "body": "Full text."}
+  ],
+  "taxHavenCountryResults": [],
+  "sanctionedCountryResults": []
+}

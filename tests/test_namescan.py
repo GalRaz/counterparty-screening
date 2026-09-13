@@ -1,0 +1,210 @@
+import json
+
+import httpx
+import pytest
+
+from screening import namescan as NS
+from screening.config import NAMESCAN_BASE
+from screening.record import new_record
+from screening.store import Store
+from screening.subjects import Identifier, Subject
+from tests.conftest import NOW, json_response, load_fixture, mock_client
+
+LATER = "2026-10-01T10:00:00+00:00"
+
+
+def person():
+    return Subject(type="person", name="Mark Phillips", jurisdiction="AU",
+                   identifiers=[Identifier("dob", "1970", "passport copy")])
+
+
+def org():
+    return Subject(type="organization", name="Green Bond Corporation", jurisdiction="LU",
+                   identifiers=[Identifier("registration_number", "B123456", "RCS extract")])
+
+
+def make_handler(person_body=None, org_body=None, credits=78.5, fail_times=0, status_on_fail=503):
+    state = {"posts": 0, "fails_left": fail_times, "requests": []}
+
+    def handler(req: httpx.Request):
+        state["requests"].append(req)
+        assert req.headers["api-key"] == "KEY"
+        if req.url.path.endswith("/credits/sapphire"):
+            return json_response(200, {**load_fixture("namescan_credits.json"), "balance": credits})
+        if req.method == "POST":
+            assert req.headers["content-type"] == "application/json-patch+json"
+            if state["fails_left"] > 0:
+                state["fails_left"] -= 1
+                return json_response(status_on_fail, {"message": "degraded"})
+            state["posts"] += 1
+            if "person-scans" in req.url.path:
+                return json_response(200, person_body or load_fixture("namescan_person.json"))
+            return json_response(200, org_body or load_fixture("namescan_org.json"))
+        if req.method == "GET" and "/sapphire/" in req.url.path:
+            body = load_fixture("namescan_person.json") if "person" in req.url.path else load_fixture("namescan_org.json")
+            return json_response(200, body)
+        raise AssertionError(f"unexpected {req.method} {req.url}")
+
+    return handler, state
+
+
+def client_for(handler, **kw):
+    return NS.NameScanClient(mock_client(handler, NAMESCAN_BASE), "KEY", sleep=lambda s: None, **kw)
+
+
+def test_person_body_only_uses_sourced_fields():
+    s = Subject(type="person", name="Mark Laurence Allington", jurisdiction="GB")
+    body = NS.build_person_body(s, include_media=True)
+    assert body == {"firstName": "Mark", "middleName": "Laurence", "lastName": "Allington",
+                    "exact": False, "matchRate": 75, "maxResultCount": 100, "includeAdvancedMedia": True}
+    assert "country" not in body  # jurisdiction is NOT a sourced identifier (§7.5)
+
+
+def test_person_body_with_sourced_attributes_and_original_name():
+    s = Subject(type="person", name="Александр Захаров",
+                identifiers=[Identifier("dob", "1965", "passport copy"),
+                             Identifier("country", "RU", "passport copy"),
+                             Identifier("gender", "male", "passport copy")])
+    body = NS.build_person_body(s, include_media=False)
+    assert body["originalName"] == "Александр Захаров"
+    assert "firstName" not in body
+    assert body["dob"] == "1965" and body["country"] == "RU" and body["gender"] == "male"
+
+
+def test_org_body():
+    assert NS.build_org_body(org(), include_media=True) == {
+        "name": "Green Bond Corporation", "registrationNumber": "B123456",
+        "exact": False, "matchRate": 75, "maxResultCount": 100, "includeAdvancedMedia": True}
+
+
+def test_scan_person_ok_persists_scan_and_media_ok(tmp_path):
+    handler, state = make_handler()
+    with Store(tmp_path / "s.db") as store:
+        res = client_for(handler).scan(person(), include_media=True, now=NOW, store=store)
+        assert res.check["status"] == "ok"
+        assert res.layer_c["scan_id"] == "ps-abc123"
+        assert res.layer_c["adverse_media"] == "ok"
+        assert res.layer_c["credits_consumed"] == 1.25
+        assert res.layer_c["reused_prior_scan"] is False
+        assert len(res.matches) == 1 and res.matches[0]["category"] == "PEP"
+        assert res.media[0]["title"] == "Council fined over procurement"
+        assert store.find_scan(person().normalised_key(), 90, NOW) == "ps-abc123"
+        assert store.vendor_text("ps-abc123") is not None
+        # request timeout must be >= 60s when media requested
+        post = [r for r in state["requests"] if r.method == "POST"][0]
+        assert post.extensions["timeout"]["read"] >= 60
+
+
+def test_media_absent_means_failed_not_empty(tmp_path):
+    body = {**load_fixture("namescan_person.json")}
+    del body["advancedMedia"]
+    handler, _ = make_handler(person_body=body)
+    with Store(tmp_path / "s.db") as store:
+        res = client_for(handler).scan(person(), include_media=True, now=NOW, store=store)
+    assert res.layer_c["adverse_media"] == "failed"
+    assert res.layer_c["credits_consumed"] == 1.0
+    assert any("adverse media" in g.lower() for g in res.coverage_gaps)
+
+
+def test_media_present_but_empty_is_ok(tmp_path):
+    body = {**load_fixture("namescan_person.json"), "advancedMedia": []}
+    handler, _ = make_handler(person_body=body)
+    with Store(tmp_path / "s.db") as store:
+        res = client_for(handler).scan(person(), include_media=True, now=NOW, store=store)
+    assert res.layer_c["adverse_media"] == "ok" and res.media == []
+
+
+def test_media_not_requested(tmp_path):
+    handler, _ = make_handler(org_body=load_fixture("namescan_org.json"))
+    with Store(tmp_path / "s.db") as store:
+        res = client_for(handler).scan(org(), include_media=False, now=NOW, store=store)
+    assert res.layer_c["adverse_media"] == "not_requested"
+    assert res.layer_c["credits_consumed"] == 1.0
+    assert res.layer_c["tax_haven_country_results"] == [{"country": "Luxembourg"}]
+
+
+def test_dedup_reuses_scan_within_90_days(tmp_path):
+    handler, state = make_handler()
+    with Store(tmp_path / "s.db") as store:
+        nc = client_for(handler)
+        nc.scan(person(), include_media=True, now=NOW, store=store)
+        res = nc.scan(person(), include_media=True, now=LATER, store=store)
+    assert state["posts"] == 1
+    assert res.layer_c["reused_prior_scan"] is True
+    assert res.layer_c["credits_consumed"] == 0.0
+    assert res.layer_c["scan_id"] == "ps-abc123"
+
+
+def test_retries_twice_then_succeeds(tmp_path):
+    handler, state = make_handler(fail_times=2)
+    with Store(tmp_path / "s.db") as store:
+        res = client_for(handler).scan(person(), include_media=True, now=NOW, store=store)
+    assert res.check["status"] == "ok" and res.check["attempts"] == 3
+
+
+def test_gives_up_after_two_retries(tmp_path):
+    handler, state = make_handler(fail_times=3)
+    with Store(tmp_path / "s.db") as store:
+        res = client_for(handler).scan(person(), include_media=True, now=NOW, store=store)
+        assert res.check["status"] == "failed" and res.check["attempts"] == 3
+        assert res.layer_c is None
+        assert any("Layer C" in g for g in res.coverage_gaps)
+        assert store.find_scan(person().normalised_key(), 90, NOW) is None
+
+
+def test_4xx_is_not_retried(tmp_path):
+    handler, state = make_handler(fail_times=1, status_on_fail=400)
+    with Store(tmp_path / "s.db") as store:
+        res = client_for(handler).scan(person(), include_media=True, now=NOW, store=store)
+    assert res.check["status"] == "failed" and res.check["attempts"] == 1
+
+
+def test_test_mode_forces_media_off_and_skips_store(tmp_path):
+    handler, state = make_handler(person_body={**load_fixture("namescan_person.json"), "advancedMedia": None})
+    with Store(tmp_path / "s.db") as store:
+        res = client_for(handler, test_mode=True).scan(person(), include_media=True, now=NOW, store=store)
+        assert json.loads([r for r in state["requests"] if r.method == "POST"][0].content)["includeAdvancedMedia"] is False
+        assert res.layer_c["test_mode"] is True
+        assert res.layer_c["adverse_media"] == "not_requested"
+        assert res.layer_c["credits_consumed"] == 0.0
+        assert store.find_scan(person().normalised_key(), 90, NOW) is None
+
+
+def test_run_layer_c_preflight_aborts_when_credits_short(tmp_path):
+    handler, state = make_handler(credits=2.0)
+    with Store(tmp_path / "s.db") as store:
+        with pytest.raises(NS.RunAborted, match="credits"):
+            NS.run_layer_c([person(), org()], client_for(handler), store, now=NOW, max_subjects=20)
+    assert state["posts"] == 0
+
+
+def test_run_layer_c_ceiling_aborts(tmp_path):
+    handler, state = make_handler()
+    with Store(tmp_path / "s.db") as store:
+        with pytest.raises(NS.RunAborted, match="ceiling"):
+            NS.run_layer_c([person(), org()], client_for(handler), store, now=NOW, max_subjects=1)
+    assert state["posts"] == 0
+
+
+def test_run_layer_c_skips_credit_cost_for_dedup_hits(tmp_path):
+    handler, state = make_handler(credits=1.3)
+    with Store(tmp_path / "s.db") as store:
+        store.record_scan(person().normalised_key(), "ps-abc123", "namescan", "person", NOW)
+        results = NS.run_layer_c([person(), org()], client_for(handler), store, now=NOW, max_subjects=20)
+    assert [r.layer_c["reused_prior_scan"] for r in results] == [True, False]
+    assert state["posts"] == 1
+
+
+def test_run_layer_c_low_credit_warning(tmp_path):
+    handler, _ = make_handler(credits=15)
+    with Store(tmp_path / "s.db") as store:
+        results = NS.run_layer_c([org()], client_for(handler), store, now=NOW, max_subjects=20)
+    assert any("below 20" in w for w in results[0].warnings)
+
+
+def test_run_layer_c_credits_endpoint_failure_aborts(tmp_path):
+    def handler(req):
+        return json_response(500, {})
+    with Store(tmp_path / "s.db") as store:
+        with pytest.raises(NS.RunAborted, match="balance"):
+            NS.run_layer_c([org()], client_for(handler), store, now=NOW, max_subjects=20)
