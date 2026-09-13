@@ -154,6 +154,77 @@ def test_layer_c_matches_and_vendor_media_are_rendered(cases_dir):
     assert L.lint_report(out, recs) == []
 
 
+def test_dispositioned_watchlist_candidate_renders_and_counts_in_bottom_line(cases_dir):
+    c = build_case(cases_dir)
+    recs = [c.record(s) for s in c.slugs()]
+    recs[1]["watchlist_candidates"].append({"source": "opensanctions", "id": "Q1", "caption": "Mark Philips",
+                                             "score": 0.74, "topics": ["role.pep"], "datasets": ["au_pep"],
+                                             "entity": None, "assessment": "false_positive",
+                                             "proposed_disposition": None, "dispositioned_by": "Jane Analyst",
+                                             "dispositioned_at": "2026-09-14T09:00:00+00:00",
+                                             "disposition_note": "different date of birth"})
+    out = RP.render(c, recs, NOW)
+    findings = L.report_section(out, "Findings")
+    assert "dispositioned false_positive by Jane Analyst on 2026-09-14" in findings
+    assert "different date of birth" in findings
+    bottom = L.report_section(out, "Bottom line")
+    assert "dispositioned by the commissioning party: 1" in bottom
+    assert L.lint_report(out, recs) == []
+
+
+def test_layer_c_match_disposition_renders(cases_dir):
+    c = build_case(cases_dir)
+    recs = [c.record(s) for s in c.slugs()]
+    r = recs[1]
+    r["checks_run"].append({"layer": "C", "provider": "namescan", "tier": "sapphire", "status": "ok",
+                            "timestamp": NOW, "attempts": 1})
+    r["layer_c"] = {"provider": "namescan", "tier": "sapphire", "scan_id": "ps-1", "number_of_matches": 1,
+                    "adverse_media": "ok", "credits_consumed": 1.25, "reused_prior_scan": False,
+                    "test_mode": False, "scan_date": NOW, "match_rate_floor": 75,
+                    "matches": [{"name": "Mark Phillips", "match_rate": 88, "category": "PEP",
+                                 "matched_fields": "Name", "official_lists": [],
+                                 "assessment": "true_match", "dispositioned_by": "Jane Analyst",
+                                 "dispositioned_at": "2026-09-14T09:00:00+00:00", "disposition_note": None}],
+                    "advanced_media_items": []}
+    out = RP.render(c, recs, NOW)
+    findings = L.report_section(out, "Findings")
+    assert "assessment: true_match — dispositioned true_match by Jane Analyst on 2026-09-14" in findings
+    bottom = L.report_section(out, "Bottom line")
+    assert "dispositioned by the commissioning party: 1" in bottom
+    assert L.lint_report(out, recs) == []
+
+
+def test_bottom_line_dispositioned_count_zero_when_none(cases_dir):
+    c = build_case(cases_dir)
+    recs = [c.record(s) for s in c.slugs()]
+    out = RP.render(c, recs, NOW)
+    assert "dispositioned by the commissioning party: 0" in L.report_section(out, "Bottom line")
+
+
+def test_alias_scan_rendered_under_layer_c(cases_dir):
+    c = build_case(cases_dir)
+    recs = [c.record(s) for s in c.slugs()]
+    r = recs[1]
+    r["checks_run"].append({"layer": "C", "provider": "namescan", "tier": "sapphire", "status": "ok",
+                            "timestamp": NOW, "attempts": 1})
+    r["layer_c"] = {"provider": "namescan", "tier": "sapphire", "scan_id": "ps-1", "number_of_matches": 0,
+                    "adverse_media": "ok", "credits_consumed": 1.25, "reused_prior_scan": False,
+                    "test_mode": False, "scan_date": NOW, "match_rate_floor": 75, "matches": [],
+                    "advanced_media_items": [],
+                    "alias_scans": [{"alias": "M. Phillips", "scan_id": "ps-2", "number_of_matches": 1,
+                                     "matches": [{"name": "M Phillips", "match_rate": 80, "category": "PEP",
+                                                  "matched_fields": "Name", "official_lists": [],
+                                                  "assessment": "unreviewed", "dispositioned_by": None,
+                                                  "dispositioned_at": None, "disposition_note": None}],
+                                     "adverse_media": "ok", "credits_consumed": 1.25,
+                                     "reused_prior_scan": False, "test_mode": False}]}
+    out = RP.render(c, recs, NOW)
+    findings = L.report_section(out, "Findings")
+    assert "Alias scan 'M. Phillips': scan ps-2, 1 match(es)" in findings
+    assert "candidate: M Phillips — match rate 80" in findings
+    assert L.lint_report(out, recs) == []
+
+
 def test_vendor_titled_unresolved_item_under_limitations_does_not_trip_the_scan(cases_dir):
     c = build_case(cases_dir)
     recs = [c.record(s) for s in c.slugs()]

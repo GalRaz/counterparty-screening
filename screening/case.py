@@ -77,3 +77,6 @@ class Case:
 
     def save_record(self, slug: str, record: dict) -> None:
         _write_json(self.root / slug / "record.json", record)
+
+    def save_subject(self, slug: str, subject: Subject) -> None:
+        _write_json(self.root / slug / "subject.json", subject.to_dict())

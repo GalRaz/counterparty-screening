@@ -22,6 +22,22 @@ def _official_lists(match: dict) -> str:
     return " / ".join(f"{_or(l.get('keyword'))} ({CURRENCY[l.get('is_current')]})" for l in lists) or "none"
 
 
+def _disposition_suffix(c: dict) -> str:
+    """§5: once a human dispositions a candidate, say who and when — never a verdict on the subject."""
+    by = c.get("dispositioned_by")
+    if not by:
+        return ""
+    date = str(c.get("dispositioned_at") or "")[:10]
+    note = f" ({c['disposition_note']})" if c.get("disposition_note") else ""
+    return f" — dispositioned {c.get('assessment')} by {by} on {date}{note}"
+
+
+def _count_dispositioned(records: list[dict]) -> int:
+    n = sum(1 for r in records for c in r["watchlist_candidates"] if c.get("dispositioned_by"))
+    n += sum(1 for r in records for m in (r.get("layer_c") or {}).get("matches") or [] if m.get("dispositioned_by"))
+    return n
+
+
 def _check(record: dict, layer: str) -> dict | None:
     for c in record["checks_run"]:
         if c["layer"] == layer:
@@ -79,7 +95,8 @@ def render(case: Case, records: list[dict], now: str) -> str:
     n_poss = sum(1 for r in records for m in r["media_items"] if m["identity"] == "possible_subject")
     w(f"{len(records)} subject(s) screened. Watchlist candidates returned: {n_cand}. Media items linked to a subject "
       f"by a corroborating attribute: {n_conf}. Media items unresolved (name match only): {n_poss}. "
-      "All candidates carry `assessment: unreviewed`; the commissioning party dispositions them.\n")
+      "All candidates carry `assessment: unreviewed`; the commissioning party dispositions them. "
+      f"Candidates dispositioned by the commissioning party: {_count_dispositioned(records)}.\n")
     if not all_c:
         w(_section_8(records, now) + "\n")
     else:
@@ -121,7 +138,8 @@ def render(case: Case, records: list[dict], now: str) -> str:
                 pd = f" — proposed: {c['proposed_disposition']}" if c.get("proposed_disposition") else ""
                 w(f"- `{c.get('id')}` {_or(c.get('caption') or c.get('id'))} — score {_or(c.get('score'))}, "
                   f"topics {', '.join(c.get('topics') or []) or 'none'}, "
-                  f"datasets {', '.join(c.get('datasets') or [])} — assessment: {c['assessment']}{pd}")
+                  f"datasets {', '.join(c.get('datasets') or [])} — assessment: {c['assessment']}"
+                  f"{_disposition_suffix(c)}{pd}")
         else:
             a = _check(r, "A")
             w("- No candidates at or above threshold 0.7 were returned." if a and a["status"] == "ok" else "- Layer A did not complete.")
@@ -136,13 +154,20 @@ def render(case: Case, records: list[dict], now: str) -> str:
             for m in lc.get("matches") or []:
                 w(f"  - candidate: {_or(m.get('name'))} — match rate {_or(m.get('match_rate'))}, "
                   f"category {_or(m.get('category'))}, matched on {_or(m.get('matched_fields'))}; "
-                  f"lists: {_official_lists(m)} — assessment: unreviewed")
+                  f"lists: {_official_lists(m)} — assessment: {m.get('assessment', 'unreviewed')}{_disposition_suffix(m)}")
             vendor_media = lc.get("advanced_media_items") or []
             if vendor_media:
                 w(f"- Vendor adverse-media items (NameScan, not resolved to the subject by this system): {len(vendor_media)}")
                 for it in vendor_media:
                     w(f"  - {_or(it.get('title'))} — {_or(it.get('source_name'))}, "
                       f"{str(it.get('published') or '')[:10] or 'undated'} {_or(it.get('link'), '')}")
+            for asc in lc.get("alias_scans") or []:
+                w(f"- Alias scan '{asc.get('alias')}': scan {_or(asc.get('scan_id'))}, "
+                  f"{_or(asc.get('number_of_matches'))} match(es)")
+                for m in asc.get("matches") or []:
+                    w(f"  - candidate: {_or(m.get('name'))} — match rate {_or(m.get('match_rate'))}, "
+                      f"category {_or(m.get('category'))}, matched on {_or(m.get('matched_fields'))}; "
+                      f"lists: {_official_lists(m)} — assessment: {m.get('assessment', 'unreviewed')}{_disposition_suffix(m)}")
         else:
             w("- Not run.")
         w("")

@@ -31,6 +31,16 @@ def test_add_subject_writes_files_and_record(cases_dir):
     assert json.loads((c.root / slug / "record.json").read_text())["coverage_gaps"] == ["x"]
 
 
+def test_save_subject_overwrites_subject_json(cases_dir):
+    c = Case.create(cases_dir, "E1", "P", NOW)
+    slug = c.add_subject(Subject(type="person", name="Jane Doe"), NOW)
+    s = c.subject(slug)
+    s.aliases.append("J. Doe")
+    c.save_subject(slug, s)
+    assert c.subject(slug).aliases == ["J. Doe"]
+    assert json.loads((c.root / slug / "subject.json").read_text())["aliases"] == ["J. Doe"]
+
+
 def test_duplicate_subject_rejected(cases_dir):
     c = Case.create(cases_dir, "E1", "P", NOW)
     c.add_subject(Subject(type="person", name="Jane Doe"), NOW)

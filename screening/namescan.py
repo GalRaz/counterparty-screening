@@ -27,13 +27,15 @@ class LayerCResult:
     media: list[dict] = field(default_factory=list)
     coverage_gaps: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    alias_scans: list[dict] = field(default_factory=list)
 
     def apply(self, record: dict) -> None:
         record["checks_run"].append(self.check)
         if self.layer_c is not None:
             record["layer_c"] = {**self.layer_c,
                                  "matches": [slim_match(m) for m in self.matches],
-                                 "advanced_media_items": [slim_media_item(m) for m in self.media]}
+                                 "advanced_media_items": [slim_media_item(m) for m in self.media],
+                                 "alias_scans": self.alias_scans}
         for g in self.coverage_gaps:
             add_coverage_gap(record, g)
 
@@ -49,7 +51,11 @@ def _official_lists(entity: dict) -> list[dict]:
 
 
 def slim_match(match: dict) -> dict:
-    """What the record keeps of a vendor match (§7.7). The full object stays in the vendor-text cache."""
+    """What the record keeps of a vendor match (§7.7). The full object stays in the vendor-text cache.
+
+    Carries the same four disposition keys as a Layer A watchlist candidate (§5): `assessment` stays
+    `unreviewed` unless a human dispositions it via `screen candidate set --layer C`.
+    """
     entity = match.get("person") or match.get("entity") or {}
     return {
         "name": entity.get("name") or entity.get("primaryName"),
@@ -57,7 +63,17 @@ def slim_match(match: dict) -> dict:
         "category": match.get("category"),
         "matched_fields": match.get("matchedFields"),
         "official_lists": _official_lists(entity),
+        "assessment": "unreviewed",
+        "dispositioned_by": None,
+        "dispositioned_at": None,
+        "disposition_note": None,
     }
+
+
+def alias_subject(subject: Subject, alias: str) -> Subject:
+    """Copy of `subject` to scan as the named alias: the dedup key then differs per alias (§7.2)."""
+    return Subject(type=subject.type, name=alias, aliases=[], identifiers=subject.identifiers,
+                   jurisdiction=subject.jurisdiction, role=subject.role, os_schema=subject.os_schema)
 
 
 def slim_media_item(item: dict) -> dict:
@@ -235,8 +251,14 @@ class NameScanClient:
 
 def run_layer_c(subjects: list[Subject], nc: NameScanClient, store: Store, *, now: str,
                 include_media: bool = True, max_subjects: int) -> list[LayerCResult]:
-    if len(subjects) > max_subjects:
-        raise RunAborted(f"ceiling: {len(subjects)} subjects exceeds NAMESCAN_MAX_SUBJECTS_RUN={max_subjects}")
+    """Pre-flights the ceiling and the credit cost for the primary subjects *and* their aliases (§7.2):
+    each alias costs a separate Sapphire call once `cli._run_c` scans it, so both the runaway-loop
+    ceiling and the balance check must count `subjects_to_scan + aliases_to_scan`, not subjects alone.
+    """
+    alias_pairs = [(s, alias) for s in subjects for alias in s.aliases]
+    total_units = len(subjects) + len(alias_pairs)
+    if total_units > max_subjects:
+        raise RunAborted(f"ceiling: {total_units} subjects exceeds NAMESCAN_MAX_SUBJECTS_RUN={max_subjects}")
     warnings: list[str] = []
     if not nc.test_mode:
         try:
@@ -244,10 +266,13 @@ def run_layer_c(subjects: list[Subject], nc: NameScanClient, store: Store, *, no
         except (httpx.HTTPError, KeyError, ValueError, TypeError) as e:
             raise RunAborted(f"could not read credit balance: {type(e).__name__}: {e}") from e
         unit = config.NS_COST_WITH_MEDIA if include_media else config.NS_COST_NO_MEDIA
-        to_scan = [s for s in subjects if store.find_scan(s.normalised_key(), config.DEDUP_DAYS, now) is None]
-        cost = unit * len(to_scan)
+        subjects_to_scan = [s for s in subjects if store.find_scan(s.normalised_key(), config.DEDUP_DAYS, now) is None]
+        aliases_to_scan = [(s, alias) for s, alias in alias_pairs
+                           if store.find_scan(alias_subject(s, alias).normalised_key(), config.DEDUP_DAYS, now) is None]
+        n_new = len(subjects_to_scan) + len(aliases_to_scan)
+        cost = unit * n_new
         if balance < cost:
-            raise RunAborted(f"insufficient credits: balance {balance} < run cost {cost} for {len(to_scan)} new scan(s)")
+            raise RunAborted(f"insufficient credits: balance {balance} < run cost {cost} for {n_new} new scan(s)")
         if balance < config.NS_LOW_CREDIT_WARN:
             warnings.append(f"credit balance {balance} is below 20 — top up soon")
     results = []

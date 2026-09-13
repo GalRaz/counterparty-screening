@@ -325,7 +325,8 @@ def test_apply_writes_slim_match_and_media_shapes(tmp_path):
     assert rec["layer_c"]["scan_date"] == "2026-09-13T10:00:00"
     assert rec["layer_c"]["matches"] == [{
         "name": "Mark Phillips", "match_rate": 88, "category": "PEP", "matched_fields": "Name",
-        "official_lists": [{"keyword": "Australian PEP", "is_current": True}]}]
+        "official_lists": [{"keyword": "Australian PEP", "is_current": True}],
+        "assessment": "unreviewed", "dispositioned_by": None, "dispositioned_at": None, "disposition_note": None}]
     assert rec["layer_c"]["advanced_media_items"] == [{
         "title": "Council fined over procurement", "source_name": "Example News",
         "published": "2024-06-01T00:00:00", "link": "https://news.example/1"}]
@@ -346,7 +347,8 @@ def test_apply_slims_organisation_matches(tmp_path):
     res.apply(rec)
     assert rec["layer_c"]["matches"] == [{
         "name": "Green Bond Corporation", "match_rate": 91, "category": "Sanction",
-        "matched_fields": "Name", "official_lists": [{"keyword": "EU Sanctions", "is_current": False}]}]
+        "matched_fields": "Name", "official_lists": [{"keyword": "EU Sanctions", "is_current": False}],
+        "assessment": "unreviewed", "dispositioned_by": None, "dispositioned_at": None, "disposition_note": None}]
 
 
 def test_alias_gap_survives_a_dedup_reuse(tmp_path):
@@ -358,6 +360,54 @@ def test_alias_gap_survives_a_dedup_reuse(tmp_path):
         res = client_for(handler).scan(s, include_media=True, now=LATER, store=store)
     assert state["posts"] == 0 and res.layer_c["reused_prior_scan"] is True
     assert "Layer C scanned the primary name only; alias variant(s) not sent: M. Phillips" in res.coverage_gaps
+
+
+def test_alias_subject_copies_name_only_and_drops_aliases():
+    s = Subject(type="person", name="Mark Phillips", aliases=["M. Phillips", "Marcus Phillips"],
+                jurisdiction="AU", identifiers=[Identifier("dob", "1970", "passport copy")])
+    a = NS.alias_subject(s, "M. Phillips")
+    assert a.name == "M. Phillips"
+    assert a.aliases == []
+    assert a.jurisdiction == "AU"
+    assert a.identifier("dob") == "1970"
+    assert a.normalised_key() != s.normalised_key()
+
+
+def test_run_layer_c_ceiling_counts_aliases(tmp_path):
+    handler, state = make_handler()
+    s = Subject(type="person", name="Mark Phillips", aliases=["M. Phillips", "Marcus Phillips"],
+                identifiers=[Identifier("dob", "1970", "passport copy")])
+    with Store(tmp_path / "s.db") as store:
+        # 1 subject + 2 aliases = 3 units, ceiling 2 must abort
+        with pytest.raises(NS.RunAborted, match="ceiling"):
+            NS.run_layer_c([s], client_for(handler), store, now=NOW, max_subjects=2)
+    assert state["posts"] == 0
+    with Store(tmp_path / "s.db") as store:
+        # ceiling 3 is exactly enough
+        results = NS.run_layer_c([s], client_for(handler), store, now=NOW, max_subjects=3)
+    assert len(results) == 1
+
+
+def test_run_layer_c_preflight_cost_counts_aliases(tmp_path):
+    # unit is 1.25 (media on); 1 subject + 2 aliases = 3 units => cost 3.75; balance 3 must abort
+    handler, state = make_handler(credits=3.0)
+    s = Subject(type="person", name="Mark Phillips", aliases=["M. Phillips", "Marcus Phillips"],
+                identifiers=[Identifier("dob", "1970", "passport copy")])
+    with Store(tmp_path / "s.db") as store:
+        with pytest.raises(NS.RunAborted, match="credits"):
+            NS.run_layer_c([s], client_for(handler), store, now=NOW, max_subjects=20)
+    assert state["posts"] == 0
+
+
+def test_run_layer_c_preflight_cost_skips_already_scanned_aliases(tmp_path):
+    # dedup hit for one alias means only 2 new units (subject + 1 alias) => cost 2.5, balance 2.5 is enough
+    handler, state = make_handler(credits=2.5)
+    s = Subject(type="person", name="Mark Phillips", aliases=["M. Phillips", "Marcus Phillips"],
+                identifiers=[Identifier("dob", "1970", "passport copy")])
+    with Store(tmp_path / "s.db") as store:
+        store.record_scan(NS.alias_subject(s, "M. Phillips").normalised_key(), "ps-alias", "namescan", "person", NOW)
+        results = NS.run_layer_c([s], client_for(handler), store, now=NOW, max_subjects=20)
+    assert len(results) == 1
 
 
 def test_official_lists_keep_is_current_per_list(tmp_path):
