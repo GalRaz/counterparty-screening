@@ -85,6 +85,12 @@ already carries the gap and the report will carry the §8 paragraph. A `--test` 
 the §8 paragraph stays and the report says the test key was used. Re-running `run C` after a failed
 or key-less attempt replaces that attempt — you do not need to clean up first.
 
+If the subject has aliases, `run C` scans each alias automatically, right after the primary-name scan
+(one extra credit per alias, §7.2) — you do not run anything extra for them. The pre-flight balance
+check and the `NAMESCAN_MAX_SUBJECTS_RUN` ceiling both count alias scans, so a subject with several
+aliases can trip either on its own. If any alias scan fails, the record carries a gap naming that
+alias; if they all succeed, the record does not claim alias variants went unsent.
+
 ### 4. Layer B — you run this
 
 For each subject:
@@ -174,6 +180,29 @@ Re-running `run A`, `run C` or `run D` replaces that layer's previous result; it
 Then read `cases/<ID>/summary.md` and give the user a short account in chat: what was
 screened, how many candidates per subject, what remains unresolved, and what identifiers would sharpen a
 re-screen. Use the report's own phrasing for negatives. Do not add a verdict.
+
+**Disposition is the commissioning party's call, not yours.** `assessment` on a watchlist candidate or
+Layer C match stays `unreviewed` until a human says otherwise (§5). Only run `screen candidate set` when
+the user has explicitly told you, in this conversation, how a specific candidate should be dispositioned
+— never propose or guess a disposition yourself. Record their name verbatim in `--by`:
+
+```bash
+.venv/bin/screen record show <ID> <slug>     # find the candidate's `id` (Layer A) or its 0-based index in layer_c.matches (Layer C)
+.venv/bin/screen candidate set <ID> <slug> <candidate-id> --assessment false_positive \
+  --by "Jane Analyst" --note "different date of birth"
+.venv/bin/screen candidate set <ID> <slug> 0 --layer C --assessment true_match --by "Jane Analyst"
+```
+
+`--assessment` is one of `false_positive`, `true_match`, `unresolved`. Exits 1 if the candidate id/index
+is not found or `--by` is empty.
+
+**Adding a discovered alias to an existing subject:**
+
+```bash
+.venv/bin/screen subject alias <ID> <slug> "Marcus Phillips"
+```
+
+Exits 1 if that alias is already recorded. `run C` picks it up automatically the next time it runs.
 
 ## Exit codes
 

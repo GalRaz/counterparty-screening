@@ -98,6 +98,54 @@ def cmd_subject_add(a) -> int:
     return EXIT_OK
 
 
+def cmd_subject_alias(a) -> int:
+    case = _case(a.engagement)
+    subject = case.subject(a.slug)
+    alias = " ".join(a.alias.split())
+    if alias in subject.aliases:
+        err(f"{a.slug}: alias {alias!r} already present")
+        return EXIT_ERR
+    subject.aliases.append(alias)
+    case.save_subject(a.slug, subject)
+    rec = case.record(a.slug)
+    rec["subject"]["aliases"] = list(subject.aliases)
+    case.save_record(a.slug, rec)
+    print(f"{a.slug}: alias {alias!r} added")
+    return EXIT_OK
+
+
+def cmd_candidate_set(a) -> int:
+    by = (a.by or "").strip()
+    if not by:
+        err("--by is required and must not be empty")
+        return EXIT_ERR
+    case = _case(a.engagement)
+    rec = case.record(a.slug)
+    if a.layer == "C":
+        matches = ((rec.get("layer_c") or {}).get("matches")) or []
+        try:
+            idx = int(a.candidate_id)
+        except ValueError:
+            err(f"--layer C selects layer_c.matches[] by 0-based index, got {a.candidate_id!r}")
+            return EXIT_ERR
+        if not (0 <= idx < len(matches)):
+            err(f"layer_c.matches index {idx} out of range: {a.slug} has {len(matches)} match(es)")
+            return EXIT_ERR
+        target = matches[idx]
+    else:
+        target = next((c for c in rec["watchlist_candidates"] if c.get("id") == a.candidate_id), None)
+        if target is None:
+            err(f"no watchlist candidate {a.candidate_id!r} in {a.slug}")
+            return EXIT_ERR
+    target["assessment"] = a.assessment
+    target["dispositioned_by"] = by
+    target["dispositioned_at"] = now()
+    target["disposition_note"] = a.note
+    case.save_record(a.slug, rec)
+    print(f"{a.slug}: candidate {a.candidate_id} set to {a.assessment} by {by}")
+    return EXIT_OK
+
+
 def cmd_run(a) -> int:
     if a.layer != "C" and (a.test or a.no_media):
         err(f"--test and --no-media apply to Layer C only; Layer {a.layer} takes neither")
@@ -144,6 +192,7 @@ def _run_c(case: Case, slugs: list[str], a) -> int:
         return EXIT_NOKEY
     nc = NS.NameScanClient(make_ns_client(), key, test_mode=a.test)
     subjects = [case.subject(s) for s in slugs]
+    alias_gap_prefix = "Layer C scanned the primary name only; alias variant(s) not sent:"
     with Store(store_path()) as st:
         try:
             results = NS.run_layer_c(subjects, nc, st, now=now(), include_media=not a.no_media,
@@ -151,6 +200,29 @@ def _run_c(case: Case, slugs: list[str], a) -> int:
         except NS.RunAborted as e:
             err(f"Layer C aborted before any spend: {e}")
             return EXIT_ABORT
+        for subject, res in zip(subjects, results):
+            if res.layer_c is None or not subject.aliases:
+                continue
+            all_ok = True
+            for alias in subject.aliases:
+                ares = nc.scan(NS.alias_subject(subject, alias), include_media=not a.no_media, now=now(), store=st)
+                res.warnings.extend(ares.warnings)
+                if ares.check["status"] == "ok" and ares.layer_c is not None:
+                    res.alias_scans.append({
+                        "alias": alias,
+                        "scan_id": ares.layer_c["scan_id"],
+                        "number_of_matches": ares.layer_c["number_of_matches"],
+                        "matches": [NS.slim_match(m) for m in ares.matches],
+                        "adverse_media": ares.layer_c["adverse_media"],
+                        "credits_consumed": ares.layer_c["credits_consumed"],
+                        "reused_prior_scan": ares.layer_c["reused_prior_scan"],
+                        "test_mode": ares.layer_c["test_mode"],
+                    })
+                else:
+                    all_ok = False
+                    res.coverage_gaps.append(f"Layer C alias scan for {alias!r} failed: {ares.check.get('error')}")
+            if all_ok:
+                res.coverage_gaps = [g for g in res.coverage_gaps if not g.startswith(alias_gap_prefix)]
     for slug, res in zip(slugs, results):
         rec = case.record(slug)
         R.replace_layer(rec, "C")
@@ -361,6 +433,15 @@ def build_parser() -> argparse.ArgumentParser:
     sa = s.add_parser("add"); sa.add_argument("engagement"); sa.add_argument("--type", required=True, choices=["person", "organization"])
     sa.add_argument("--name", required=True); sa.add_argument("--alias", action="append"); sa.add_argument("--id", action="append", help="kind=value@source")
     sa.add_argument("--jurisdiction"); sa.add_argument("--role"); sa.add_argument("--os-schema"); sa.set_defaults(fn=cmd_subject_add)
+    sal = s.add_parser("alias"); sal.add_argument("engagement"); sal.add_argument("slug"); sal.add_argument("alias")
+    sal.set_defaults(fn=cmd_subject_alias)
+
+    cd = sp.add_parser("candidate").add_subparsers(dest="sub", required=True)
+    cds = cd.add_parser("set"); cds.add_argument("engagement"); cds.add_argument("slug"); cds.add_argument("candidate_id")
+    cds.add_argument("--assessment", required=True, choices=["false_positive", "true_match", "unresolved"])
+    cds.add_argument("--by", required=True); cds.add_argument("--note")
+    cds.add_argument("--layer", choices=["C"], help="select layer_c.matches[] by 0-based index instead of id")
+    cds.set_defaults(fn=cmd_candidate_set)
 
     r = sp.add_parser("run"); r.add_argument("layer", choices=["A", "C", "D"]); r.add_argument("engagement")
     r.add_argument("--subject"); r.add_argument("--test", action="store_true", help="NameScan test key (no credits, no media)")

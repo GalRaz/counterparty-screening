@@ -331,6 +331,96 @@ def test_layerb_close_failed_requires_reason_and_records_gap(capsys, monkeypatch
     assert run("lint", "E1", capsys=capsys)[0] == 0
 
 
+def test_candidate_set_dispositions_watchlist_candidate(capsys, monkeypatch, wired):
+    setup_case(capsys, monkeypatch)
+    assert run("run", "A", "E1", "--subject", "mark-phillips", capsys=capsys)[0] == 0
+    rec = json.loads(run("record", "show", "E1", "mark-phillips", capsys=capsys)[1].out)
+    cand_id = rec["watchlist_candidates"][0]["id"]
+    code, out = run("candidate", "set", "E1", "mark-phillips", cand_id, "--assessment", "false_positive",
+                    "--by", "Jane Analyst", "--note", "different DOB", capsys=capsys)
+    assert code == 0
+    rec = json.loads(run("record", "show", "E1", "mark-phillips", capsys=capsys)[1].out)
+    cand = [c for c in rec["watchlist_candidates"] if c["id"] == cand_id][0]
+    assert cand["assessment"] == "false_positive"
+    assert cand["dispositioned_by"] == "Jane Analyst"
+    assert cand["dispositioned_at"] == NOW
+    assert cand["disposition_note"] == "different DOB"
+    assert run("lint", "E1", capsys=capsys)[0] == 0
+
+
+def test_candidate_set_exits_1_when_id_not_found(capsys, monkeypatch, wired):
+    setup_case(capsys, monkeypatch)
+    assert run("run", "A", "E1", "--subject", "mark-phillips", capsys=capsys)[0] == 0
+    code, out = run("candidate", "set", "E1", "mark-phillips", "NOPE", "--assessment", "true_match",
+                    "--by", "Jane Analyst", capsys=capsys)
+    assert code == 1 and "NOPE" in out.err
+
+
+def test_candidate_set_exits_1_when_by_is_empty(capsys, monkeypatch, wired):
+    setup_case(capsys, monkeypatch)
+    assert run("run", "A", "E1", "--subject", "mark-phillips", capsys=capsys)[0] == 0
+    rec = json.loads(run("record", "show", "E1", "mark-phillips", capsys=capsys)[1].out)
+    cand_id = rec["watchlist_candidates"][0]["id"]
+    code, out = run("candidate", "set", "E1", "mark-phillips", cand_id, "--assessment", "true_match",
+                    "--by", "  ", capsys=capsys)
+    assert code == 1 and "--by" in out.err
+
+
+def test_candidate_set_layer_c_by_index(capsys, monkeypatch, wired):
+    setup_case(capsys, monkeypatch)
+    assert run("run", "C", "E1", "--subject", "mark-phillips", capsys=capsys)[0] == 0
+    code, out = run("candidate", "set", "E1", "mark-phillips", "0", "--layer", "C",
+                    "--assessment", "true_match", "--by", "Jane Analyst", capsys=capsys)
+    assert code == 0
+    rec = json.loads(run("record", "show", "E1", "mark-phillips", capsys=capsys)[1].out)
+    m = rec["layer_c"]["matches"][0]
+    assert m["assessment"] == "true_match" and m["dispositioned_by"] == "Jane Analyst"
+    assert run("lint", "E1", capsys=capsys)[0] == 0
+
+    code, out = run("candidate", "set", "E1", "mark-phillips", "5", "--layer", "C",
+                    "--assessment", "true_match", "--by", "Jane Analyst", capsys=capsys)
+    assert code == 1 and "out of range" in out.err
+
+
+def test_subject_alias_appends_and_dedupes(capsys, monkeypatch, wired):
+    setup_case(capsys, monkeypatch)
+    code, out = run("subject", "alias", "E1", "mark-phillips", "Marcus Phillips", capsys=capsys)
+    assert code == 0
+    rec = json.loads(run("record", "show", "E1", "mark-phillips", capsys=capsys)[1].out)
+    assert rec["subject"]["aliases"] == ["M. Phillips", "Marcus Phillips"]
+    code, out = run("subject", "alias", "E1", "mark-phillips", "Marcus Phillips", capsys=capsys)
+    assert code == 1 and "Marcus Phillips" in out.err
+    code, out = run("subject", "alias", "E1", "mark-phillips", "M. Phillips", capsys=capsys)
+    assert code == 1
+
+
+def test_run_c_scans_each_alias_and_drops_the_alias_gap(capsys, monkeypatch, wired):
+    assert run("case", "new", "E1", "--commissioning-party", "GMC Authority", capsys=capsys)[0] == 0
+    assert run("subject", "add", "E1", "--type", "person", "--name", "Mark Phillips", "--jurisdiction", "AU",
+               "--id", "dob=1970@passport copy", "--alias", "M. Phillips", "--alias", "Marcus Phillips",
+               capsys=capsys)[0] == 0
+    code, out = run("run", "C", "E1", "--subject", "mark-phillips", capsys=capsys)
+    assert code == 0
+    rec = json.loads(run("record", "show", "E1", "mark-phillips", capsys=capsys)[1].out)
+    aliases = rec["layer_c"]["alias_scans"]
+    assert [a["alias"] for a in aliases] == ["M. Phillips", "Marcus Phillips"]
+    assert all(a["scan_id"] == "ps-abc123" for a in aliases)
+    assert not any("alias variant(s) not sent" in g for g in rec["coverage_gaps"])
+    assert run("lint", "E1", capsys=capsys)[0] == 0
+
+
+def test_run_c_aborts_before_spend_counting_aliases(capsys, monkeypatch, wired):
+    assert run("case", "new", "E1", "--commissioning-party", "GMC Authority", capsys=capsys)[0] == 0
+    assert run("subject", "add", "E1", "--type", "person", "--name", "Mark Phillips", "--jurisdiction", "AU",
+               "--id", "dob=1970@passport copy", "--alias", "M. Phillips", "--alias", "Marcus Phillips",
+               capsys=capsys)[0] == 0
+    monkeypatch.setenv("NAMESCAN_MAX_SUBJECTS_RUN", "2")
+    code, out = run("run", "C", "E1", "--subject", "mark-phillips", capsys=capsys)
+    assert code == 3 and "ceiling" in out.err
+    rec = json.loads(run("record", "show", "E1", "mark-phillips", capsys=capsys)[1].out)
+    assert rec["layer_c"] is None
+
+
 def test_credits_data_error_exits_1(capsys, monkeypatch, wired):
     monkeypatch.setattr(cli.NS.NameScanClient, "credits", lambda self: (_ for _ in ()).throw(KeyError("balance")))
     code, out = run("credits", capsys=capsys)
