@@ -136,14 +136,14 @@ def test_dedup_reuses_scan_within_90_days(tmp_path):
 
 
 def test_retries_twice_then_succeeds(tmp_path):
-    handler, state = make_handler(fail_times=2)
+    handler, _ = make_handler(fail_times=2)
     with Store(tmp_path / "s.db") as store:
         res = client_for(handler).scan(person(), include_media=True, now=NOW, store=store)
     assert res.check["status"] == "ok" and res.check["attempts"] == 3
 
 
 def test_gives_up_after_two_retries(tmp_path):
-    handler, state = make_handler(fail_times=3)
+    handler, _ = make_handler(fail_times=3)
     with Store(tmp_path / "s.db") as store:
         res = client_for(handler).scan(person(), include_media=True, now=NOW, store=store)
         assert res.check["status"] == "failed" and res.check["attempts"] == 3
@@ -153,10 +153,92 @@ def test_gives_up_after_two_retries(tmp_path):
 
 
 def test_4xx_is_not_retried(tmp_path):
-    handler, state = make_handler(fail_times=1, status_on_fail=400)
+    handler, _ = make_handler(fail_times=1, status_on_fail=400)
     with Store(tmp_path / "s.db") as store:
         res = client_for(handler).scan(person(), include_media=True, now=NOW, store=store)
     assert res.check["status"] == "failed" and res.check["attempts"] == 1
+
+
+def test_dedup_refetch_failure_does_not_spend(tmp_path):
+    handler, state = make_handler()
+    with Store(tmp_path / "s.db") as store:
+        store.record_scan(person().normalised_key(), "ps-abc123", "namescan", "person", NOW)
+
+        def refetch_fails(req: httpx.Request):
+            if req.method == "GET" and "/sapphire/" in req.url.path:
+                return json_response(500, {"message": "degraded"})
+            return handler(req)
+
+        res = client_for(refetch_fails).scan(person(), include_media=True, now=LATER, store=store)
+    assert state["posts"] == 0
+    assert res.check["status"] == "failed"
+    assert res.layer_c is None
+    assert any("could not be re-fetched" in g for g in res.coverage_gaps)
+
+
+def test_reused_scan_without_media_flags_failed_when_media_requested(tmp_path):
+    no_media = {k: v for k, v in load_fixture("namescan_person.json").items() if k != "advancedMedia"}
+
+    def handler(req: httpx.Request):
+        if req.method == "GET" and "/sapphire/" in req.url.path:
+            return json_response(200, no_media)
+        raise AssertionError(f"unexpected {req.method} {req.url}")
+
+    with Store(tmp_path / "s.db") as store:
+        store.record_scan(person().normalised_key(), "ps-abc123", "namescan", "person", NOW)
+        res = client_for(handler).scan(person(), include_media=True, now=LATER, store=store)
+    assert res.layer_c["reused_prior_scan"] is True
+    assert res.layer_c["adverse_media"] == "failed"
+    assert res.layer_c["credits_consumed"] == 0.0
+    assert any("adverse media" in g.lower() for g in res.coverage_gaps)
+
+
+def test_reused_scan_without_media_is_not_requested_when_media_off(tmp_path):
+    no_media = {k: v for k, v in load_fixture("namescan_person.json").items() if k != "advancedMedia"}
+
+    def handler(req: httpx.Request):
+        if req.method == "GET" and "/sapphire/" in req.url.path:
+            return json_response(200, no_media)
+        raise AssertionError(f"unexpected {req.method} {req.url}")
+
+    with Store(tmp_path / "s.db") as store:
+        store.record_scan(person().normalised_key(), "ps-abc123", "namescan", "person", NOW)
+        res = client_for(handler).scan(person(), include_media=False, now=LATER, store=store)
+    assert res.layer_c["reused_prior_scan"] is True
+    assert res.layer_c["adverse_media"] == "not_requested"
+    assert not any("adverse media" in g.lower() for g in res.coverage_gaps)
+
+
+def test_unparseable_success_body_is_not_retried(tmp_path):
+    state = {"posts": 0}
+
+    def handler(req: httpx.Request):
+        if req.method == "POST":
+            state["posts"] += 1
+            return httpx.Response(200, content=b"not json")
+        raise AssertionError(f"unexpected {req.method} {req.url}")
+
+    with Store(tmp_path / "s.db") as store:
+        res = client_for(handler).scan(person(), include_media=True, now=NOW, store=store)
+    assert res.check["status"] == "failed"
+    assert res.check["attempts"] == 1
+    assert state["posts"] == 1
+    assert res.layer_c is None
+
+
+def test_apply_writes_layer_c_check_and_gaps(tmp_path):
+    body = {**load_fixture("namescan_person.json")}
+    del body["advancedMedia"]
+    handler, _ = make_handler(person_body=body)
+    with Store(tmp_path / "s.db") as store:
+        res = client_for(handler).scan(person(), include_media=True, now=NOW, store=store)
+    rec = new_record(person(), "E", "P", NOW)
+    res.apply(rec)
+    assert rec["checks_run"][0]["layer"] == "C"
+    assert rec["layer_c"]["scan_id"] == "ps-abc123"
+    assert len(rec["layer_c"]["matches"]) == 1
+    assert "advanced_media_items" in rec["layer_c"]
+    assert any("adverse media" in g.lower() for g in rec["coverage_gaps"])
 
 
 def test_test_mode_forces_media_off_and_skips_store(tmp_path):

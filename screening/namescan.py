@@ -101,11 +101,17 @@ class NameScanClient:
                 if 400 <= r.status_code < 500:
                     return None, attempts, f"HTTP {r.status_code}"
                 r.raise_for_status()
-                return r.json(), attempts, None
-            except (httpx.HTTPError, ValueError) as e:
+            except httpx.HTTPError as e:
                 err = f"{type(e).__name__}: {e}"
                 if attempts <= config.NS_MAX_RETRIES:
                     self.sleep(2 ** attempts)
+                continue
+            # A 2xx with an unparseable body is a vendor irregularity, not a transient
+            # failure — retrying would spend more than pre-flight counted (§7).
+            try:
+                return r.json(), attempts, None
+            except ValueError:
+                return None, attempts, "unparseable response body"
         return None, attempts, err
 
     def scan(self, subject: Subject, *, include_media: bool, now: str, store: Store | None) -> LayerCResult:
@@ -128,7 +134,16 @@ class NameScanClient:
                     data, reused = r.json(), True
                     check["attempts"] = 1
                 except (httpx.HTTPError, ValueError) as e:
-                    res.warnings.append(f"could not re-fetch prior scan {prior}: {type(e).__name__}; running a new scan")
+                    # The pre-flight budget counted this as a dedup hit (free). We must not
+                    # fall back to a paid scan just because the free re-fetch failed (§7).
+                    check["status"] = "failed"
+                    check["attempts"] = 1
+                    check["error"] = f"prior scan {prior} could not be re-fetched: {type(e).__name__}"
+                    res.coverage_gaps.append(
+                        f"Layer C (namescan) prior scan {prior} could not be re-fetched; "
+                        "no new scan was run to stay within the pre-flight budget"
+                    )
+                    return res
 
         if data is None:
             body = (build_person_body if subject.type == "person" else build_org_body)(subject, media_requested)
@@ -149,7 +164,13 @@ class NameScanClient:
                 adverse_media, cost = "failed", config.NS_COST_NO_MEDIA
                 res.coverage_gaps.append("Layer C adverse media check did not run (advancedMedia absent) — Layer B must run in full mode")
         elif reused:
-            adverse_media = "ok" if data.get("advancedMedia") is not None else "not_requested"
+            if data.get("advancedMedia") is not None:
+                adverse_media = "ok"
+            elif include_media:
+                adverse_media = "failed"
+                res.coverage_gaps.append("Layer C adverse media check did not run (advancedMedia absent) — Layer B must run in full mode")
+            else:
+                adverse_media = "not_requested"
             cost = 0.0
         else:
             adverse_media, cost = "not_requested", (0.0 if self.test_mode else config.NS_COST_NO_MEDIA)
@@ -184,7 +205,7 @@ def run_layer_c(subjects: list[Subject], nc: NameScanClient, store: Store, *, no
     if not nc.test_mode:
         try:
             balance = nc.credits()
-        except (httpx.HTTPError, KeyError, ValueError) as e:
+        except (httpx.HTTPError, KeyError, ValueError, TypeError) as e:
             raise RunAborted(f"could not read credit balance: {type(e).__name__}: {e}") from e
         unit = config.NS_COST_WITH_MEDIA if include_media else config.NS_COST_NO_MEDIA
         to_scan = [s for s in subjects if store.find_scan(s.normalised_key(), config.DEDUP_DAYS, now) is None]
