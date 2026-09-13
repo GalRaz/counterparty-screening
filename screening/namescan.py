@@ -38,24 +38,25 @@ class LayerCResult:
             add_coverage_gap(record, g)
 
 
-def _official_lists(entity: dict) -> tuple[list[str], bool | None]:
-    lists = entity.get("officialLists") or []
-    keywords = [l.get("keyword") for l in lists if l.get("keyword")]
-    flags = [l.get("isCurrent") for l in lists if l.get("isCurrent") is not None]
-    return keywords, (any(flags) if flags else None)
+def _official_lists(entity: dict) -> list[dict]:
+    """One entry per list, each keeping its own `isCurrent` (§7.6).
+
+    Collapsing them to a single flag loses the distinction that matters: a candidate on a
+    current sanctions list and a candidate on a list they left in 2009 are not the same thing.
+    """
+    return [{"keyword": l.get("keyword"), "is_current": l.get("isCurrent")}
+            for l in (entity.get("officialLists") or []) if l.get("keyword")]
 
 
 def slim_match(match: dict) -> dict:
     """What the record keeps of a vendor match (§7.7). The full object stays in the vendor-text cache."""
     entity = match.get("person") or match.get("entity") or {}
-    keywords, is_current = _official_lists(entity)
     return {
         "name": entity.get("name") or entity.get("primaryName"),
         "match_rate": match.get("matchRate"),
         "category": match.get("category"),
         "matched_fields": match.get("matchedFields"),
-        "official_lists": keywords,
-        "is_current": is_current,
+        "official_lists": _official_lists(entity),
     }
 
 
@@ -184,10 +185,12 @@ class NameScanClient:
                 check["error"] = err
                 res.coverage_gaps.append(f"Layer C (namescan) call failed after {attempts} attempt(s): {err}")
                 return res
-            if subject.aliases:
-                # Sapphire scans one name per call; alias variants would each cost a credit (§7.2).
-                res.coverage_gaps.append("Layer C scanned the primary name only; alias variant(s) not sent: "
-                                         + ", ".join(subject.aliases))
+
+        if subject.aliases:
+            # Sapphire scans one name per call; alias variants would each cost a credit (§7.2).
+            # The gap is a fact about the coverage this scan bought, so a reused scan carries it too.
+            res.coverage_gaps.append("Layer C scanned the primary name only; alias variant(s) not sent: "
+                                     + ", ".join(subject.aliases))
 
         scan_id = data.get("scanId")
         if media_requested and not reused:

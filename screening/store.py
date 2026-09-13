@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import shutil
 import sqlite3
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -76,7 +77,10 @@ class Store:
             subject_dir = Path(path).resolve().parent
             if root not in subject_dir.parents:
                 # A record indexed outside the cases tree is a data problem, not a licence for rmtree.
+                # Say which path was kept: a symlinked or relocated subject dir retained in silence
+                # looks exactly like a purge that worked.
                 skipped += 1
+                print(f"purge: kept {subject_dir}; it is not under the cases root {root}", file=sys.stderr)
                 continue
             if subject_dir.is_dir():
                 try:
@@ -86,31 +90,42 @@ class Store:
                     continue
             self.conn.execute("DELETE FROM records WHERE engagement=? AND slug=?", (engagement, slug))
             records += 1
-            engagements_removed += _retire_from_engagement(subject_dir.parent, slug)
+            removed, not_retired = _retire_from_engagement(subject_dir.parent, slug, root)
+            engagements_removed += removed
+            skipped += not_retired
         self.conn.commit()
         return {"vendor_text": vt, "records": records, "engagements_removed": engagements_removed, "skipped": skipped}
 
 
-def _retire_from_engagement(engagement_dir: Path, slug: str) -> int:
-    """Drop the purged slug from meta.json. Returns 1 if the whole engagement went with it.
+def _retire_from_engagement(engagement_dir: Path, slug: str, root: Path) -> tuple[int, int]:
+    """Drop the purged slug from meta.json. Returns (engagements_removed, skipped).
 
-    summary.md names the purged subject, so it cannot outlive the record it describes.
+    summary.md names the purged subject, so it cannot outlive the record it describes. But an
+    engagement directory is only ever removed when two things are true: it sits strictly under the
+    cases root (a record indexed one level too high would otherwise make `engagement_dir` the root
+    itself), and its meta.json actually lists `subjects`. A meta without that key says nothing about
+    who else lives here, and "nothing left" is not the same fact as "we cannot tell".
     """
+    if root not in engagement_dir.parents:
+        print(f"purge: kept {engagement_dir}; it is not an engagement directory under {root}", file=sys.stderr)
+        return 0, 1
     meta_path = engagement_dir / "meta.json"
     if not meta_path.is_file():
-        return 0
+        return 0, 0
     try:
         meta = json.loads(meta_path.read_text())
     except ValueError:
-        return 0
-    remaining = [s for s in meta.get("subjects", []) if s != slug]
+        return 0, 0
+    if not isinstance(meta.get("subjects"), list):
+        return 0, 0
+    remaining = [s for s in meta["subjects"] if s != slug]
     if not remaining:
         try:
             shutil.rmtree(engagement_dir)
         except OSError:
-            return 0
+            return 0, 0
         print(f"purge: removed engagement {engagement_dir.name}; its last subject was retired")
-        return 1
+        return 1, 0
     meta["subjects"] = remaining
     meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n")
     summary = engagement_dir / "summary.md"
@@ -118,4 +133,4 @@ def _retire_from_engagement(engagement_dir: Path, slug: str) -> int:
         summary.unlink()
         print(f"purge: removed {summary}; it named the purged subject — regenerate it with "
               f"`screen report {engagement_dir.name}`")
-    return 0
+    return 0, 0

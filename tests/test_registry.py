@@ -135,3 +135,16 @@ def test_gb_org_without_key_records_the_companies_house_gap():
                          ch_client=None, ch_api_key=None, now=NOW)
     assert res.check["status"] == "ok"
     assert any("companies house" in g.lower() and "no api key" in g.lower() for g in res.coverage_gaps)
+
+
+def test_apply_carries_manual_findings_through_a_rerun():
+    from screening.record import new_record as _nr
+    rec = _nr(Subject(type="organization", name="Green Bond Corporation", jurisdiction="LU"), "E", "P", NOW)
+    rec["layer_d"] = {"gleif": [], "companies_house": None,
+                      "manual_findings": [RG.manual_finding(registry="ACRA", url="https://x", retrieved=NOW,
+                                                            fields={"status": "Live"})]}
+    res = RG.LayerDResult(check={"layer": "D", "provider": "registries", "status": "ok", "timestamp": NOW},
+                          layer_d={"gleif": [{"lei": "L1"}], "companies_house": None, "manual_findings": []})
+    res.apply(rec)
+    assert [f["registry"] for f in rec["layer_d"]["manual_findings"]] == ["ACRA"]
+    assert rec["layer_d"]["gleif"] == [{"lei": "L1"}]

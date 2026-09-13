@@ -106,3 +106,41 @@ def test_purge_counts_undeletable_directories_as_skipped(tmp_path, monkeypatch):
         counts = s.purge(T400, root=root)
     assert counts["skipped"] == 1 and counts["records"] == 0
     assert (eng / "x").exists()
+
+
+def test_purge_leaves_the_engagement_when_meta_has_no_subjects_key(tmp_path):
+    root = tmp_path / "cases"
+    eng = root / "E"
+    (eng / "x").mkdir(parents=True)
+    (eng / "x" / "record.json").write_text("{}")
+    (eng / "meta.json").write_text(json.dumps({"engagement": "E", "commissioning_party": "P"}))
+    with Store(tmp_path / "s.db") as s:
+        s.index_record("E", "x", str(eng / "x" / "record.json"), T0)
+        counts = s.purge(T400, root=root)
+    assert counts["records"] == 1 and counts["engagements_removed"] == 0
+    assert eng.is_dir() and (eng / "meta.json").is_file()
+    assert not (eng / "x").exists()
+
+
+def test_purge_never_rmtrees_the_cases_root_itself(tmp_path):
+    root = tmp_path / "cases"
+    (root / "x").mkdir(parents=True)
+    (root / "x" / "record.json").write_text("{}")
+    (root / "meta.json").write_text(json.dumps({"engagement": "E", "subjects": ["x"]}))
+    (root / "summary.md").write_text("# report\n")
+    with Store(tmp_path / "s.db") as s:
+        s.index_record("E", "x", str(root / "x" / "record.json"), T0)
+        counts = s.purge(T400, root=root)
+    assert counts["skipped"] == 1 and counts["engagements_removed"] == 0
+    assert root.is_dir() and (root / "meta.json").is_file() and (root / "summary.md").is_file()
+
+
+def test_purge_names_a_skipped_subject_dir_on_stderr(tmp_path, capsys):
+    root, eng = engagement(tmp_path, ["x"])
+    outside = tmp_path / "elsewhere" / "z"
+    outside.mkdir(parents=True)
+    (outside / "record.json").write_text("{}")
+    with Store(tmp_path / "s.db") as s:
+        s.index_record("E", "z", str(outside / "record.json"), T0)
+        s.purge(T400, root=root)
+    assert str(outside) in capsys.readouterr().err

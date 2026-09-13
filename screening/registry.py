@@ -20,7 +20,9 @@ class LayerDResult:
     def apply(self, record: dict) -> None:
         record["checks_run"].append(self.check)
         if self.layer_d is not None:
-            record["layer_d"] = self.layer_d
+            kept = (record.get("layer_d") or {}).get("manual_findings") or []
+            record["layer_d"] = {**self.layer_d,
+                                 "manual_findings": list(kept) + list(self.layer_d.get("manual_findings") or [])}
         for p in self.proposed_subjects:
             if p not in record["proposed_subjects"]:
                 record["proposed_subjects"].append(p)

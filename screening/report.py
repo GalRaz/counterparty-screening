@@ -13,6 +13,15 @@ def _or(value, fallback: str = "unknown") -> str:
     return str(value) if value not in (None, "") else fallback
 
 
+CURRENCY = {True: "current", False: "not current", None: "currency unknown"}
+
+
+def _official_lists(match: dict) -> str:
+    """`keyword (current) / keyword (not current)` — each list keeps its own currency (§7.6)."""
+    lists = match.get("official_lists") or []
+    return " / ".join(f"{_or(l.get('keyword'))} ({CURRENCY[l.get('is_current')]})" for l in lists) or "none"
+
+
 def _check(record: dict, layer: str) -> dict | None:
     for c in record["checks_run"]:
         if c["layer"] == layer:
@@ -125,9 +134,9 @@ def render(case: Case, records: list[dict], now: str) -> str:
               f"credits {lc['credits_consumed']}{' (reused prior scan)' if lc.get('reused_prior_scan') else ''}"
               f"{' (TEST KEY — no real coverage)' if lc.get('test_mode') else ''}.")
             for m in lc.get("matches") or []:
-                lists = ", ".join(m.get("official_lists") or []) or "none"
                 w(f"  - candidate: {_or(m.get('name'))} — match rate {_or(m.get('match_rate'))}, "
-                  f"category {_or(m.get('category'))}, lists {lists} — assessment: unreviewed")
+                  f"category {_or(m.get('category'))}, matched on {_or(m.get('matched_fields'))}; "
+                  f"lists: {_official_lists(m)} — assessment: unreviewed")
             vendor_media = lc.get("advanced_media_items") or []
             if vendor_media:
                 w(f"- Vendor adverse-media items (NameScan, not resolved to the subject by this system): {len(vendor_media)}")

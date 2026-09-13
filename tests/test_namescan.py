@@ -325,7 +325,7 @@ def test_apply_writes_slim_match_and_media_shapes(tmp_path):
     assert rec["layer_c"]["scan_date"] == "2026-09-13T10:00:00"
     assert rec["layer_c"]["matches"] == [{
         "name": "Mark Phillips", "match_rate": 88, "category": "PEP", "matched_fields": "Name",
-        "official_lists": ["Australian PEP"], "is_current": True}]
+        "official_lists": [{"keyword": "Australian PEP", "is_current": True}]}]
     assert rec["layer_c"]["advanced_media_items"] == [{
         "title": "Council fined over procurement", "source_name": "Example News",
         "published": "2024-06-01T00:00:00", "link": "https://news.example/1"}]
@@ -346,4 +346,35 @@ def test_apply_slims_organisation_matches(tmp_path):
     res.apply(rec)
     assert rec["layer_c"]["matches"] == [{
         "name": "Green Bond Corporation", "match_rate": 91, "category": "Sanction",
-        "matched_fields": "Name", "official_lists": ["EU Sanctions"], "is_current": False}]
+        "matched_fields": "Name", "official_lists": [{"keyword": "EU Sanctions", "is_current": False}]}]
+
+
+def test_alias_gap_survives_a_dedup_reuse(tmp_path):
+    handler, state = make_handler()
+    s = Subject(type="person", name="Mark Phillips", aliases=["M. Phillips"],
+                identifiers=[Identifier("dob", "1970", "passport copy")])
+    with Store(tmp_path / "s.db") as store:
+        store.record_scan(s.normalised_key(), "ps-abc123", "namescan", "person", NOW)
+        res = client_for(handler).scan(s, include_media=True, now=LATER, store=store)
+    assert state["posts"] == 0 and res.layer_c["reused_prior_scan"] is True
+    assert "Layer C scanned the primary name only; alias variant(s) not sent: M. Phillips" in res.coverage_gaps
+
+
+def test_official_lists_keep_is_current_per_list(tmp_path):
+    body = {**load_fixture("namescan_person.json"), "numberOfMatches": 1, "persons": [
+        {"matchRate": 88, "matchedFields": "Name, DOB", "category": "PEP",
+         "person": {"name": "Mark Phillips", "officialLists": [
+             {"keyword": "Australian PEP", "isCurrent": True},
+             {"keyword": "EU Sanctions", "isCurrent": False},
+             {"keyword": "Unknown List"}]}}]}
+    handler, _ = make_handler(person_body=body)
+    with Store(tmp_path / "s.db") as store:
+        res = client_for(handler).scan(person(), include_media=True, now=NOW, store=store)
+    rec = new_record(person(), "E", "P", NOW)
+    res.apply(rec)
+    m = rec["layer_c"]["matches"][0]
+    assert "is_current" not in m
+    assert m["official_lists"] == [
+        {"keyword": "Australian PEP", "is_current": True},
+        {"keyword": "EU Sanctions", "is_current": False},
+        {"keyword": "Unknown List", "is_current": None}]

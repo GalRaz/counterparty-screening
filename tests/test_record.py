@@ -120,3 +120,13 @@ def test_replace_layer_b_drops_only_layer_b():
     R.replace_layer(rec, "B")
     assert [c["layer"] for c in rec["checks_run"]] == ["A", "C", "D"]
     assert not any(g.startswith("Layer B") for g in rec["coverage_gaps"])
+
+
+def test_replace_layer_d_keeps_manual_findings():
+    rec = full_record()
+    rec["layer_d"]["manual_findings"] = [{"registry": "ACRA", "url": "https://x", "retrieved": NOW,
+                                          "fields": {"status": "Live"}, "note": None}]
+    R.replace_layer(rec, "D")
+    assert rec["layer_d"]["manual_findings"][0]["registry"] == "ACRA"
+    assert rec["layer_d"]["gleif"] == [] and rec["layer_d"]["companies_house"] is None
+    assert rec["proposed_subjects"] == []

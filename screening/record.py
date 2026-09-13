@@ -59,7 +59,10 @@ def replace_layer(record: dict, layer: str) -> None:
     elif layer == "C":
         record["layer_c"] = None
     elif layer == "D":
-        record["layer_d"] = None
+        # Manual findings are the agent's own registry work, typed in by hand from a public search;
+        # a re-run of the API lookups did not disprove them and must not silently discard them.
+        kept = (record.get("layer_d") or {}).get("manual_findings") or []
+        record["layer_d"] = {"gleif": [], "companies_house": None, "manual_findings": kept} if kept else None
         record["proposed_subjects"] = []
 
 
