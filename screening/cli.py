@@ -99,6 +99,9 @@ def cmd_subject_add(a) -> int:
 
 
 def cmd_run(a) -> int:
+    if a.layer != "C" and (a.test or a.no_media):
+        err(f"--test and --no-media apply to Layer C only; Layer {a.layer} takes neither")
+        return EXIT_ERR
     case = _case(a.engagement)
     slugs = _slugs(case, a.subject)
     return {"A": _run_a, "C": _run_c, "D": _run_d}[a.layer](case, slugs, a)
@@ -110,6 +113,7 @@ def _run_a(case: Case, slugs: list[str], a) -> int:
         err("OPENSANCTIONS_API_KEY not found in env or Keychain")
         for slug in slugs:
             rec = case.record(slug)
+            R.replace_layer(rec, "A")
             rec["checks_run"].append({"layer": "A", "provider": "opensanctions", "status": "not_run", "error": "no API key", "timestamp": now()})
             R.add_coverage_gap(rec, "Layer A (opensanctions) not run: no API key")
             case.save_record(slug, rec)
@@ -118,6 +122,7 @@ def _run_a(case: Case, slugs: list[str], a) -> int:
     for slug in slugs:
         res = OS.match(case.subject(slug), client, key, now())
         rec = case.record(slug)
+        R.replace_layer(rec, "A")
         res.apply(rec)
         case.save_record(slug, rec)
         print(f"{slug}: Layer A {res.check['status']}, {len(res.candidates)} candidate(s)")
@@ -131,6 +136,7 @@ def _run_c(case: Case, slugs: list[str], a) -> int:
         err(f"{key_name} not found in env or Keychain")
         for slug in slugs:
             rec = case.record(slug)
+            R.replace_layer(rec, "C")
             rec["checks_run"].append({"layer": "C", "provider": "namescan", "tier": "sapphire", "status": "not_run",
                                       "error": "no API key", "timestamp": now(), "attempts": 0})
             R.add_coverage_gap(rec, "Layer C (namescan) not run: no API key")
@@ -147,6 +153,7 @@ def _run_c(case: Case, slugs: list[str], a) -> int:
             return EXIT_ABORT
     for slug, res in zip(slugs, results):
         rec = case.record(slug)
+        R.replace_layer(rec, "C")
         if res.layer_c is not None:
             res.layer_c["authorised_by"] = case.commissioning_party
             res.layer_c["authorised_at"] = now()
@@ -167,6 +174,7 @@ def _run_d(case: Case, slugs: list[str], a) -> int:
     for slug in slugs:
         res = RG.run_layer_d(case.subject(slug), gleif_client=gleif, ch_client=ch, ch_api_key=ch_key, now=now())
         rec = case.record(slug)
+        R.replace_layer(rec, "D")
         res.apply(rec)
         case.save_record(slug, rec)
         print(f"{slug}: Layer D {res.check['status']}; proposed subjects: {len(res.proposed_subjects)}")
@@ -207,19 +215,54 @@ def cmd_media_add(a) -> int:
     return EXIT_OK
 
 
+def cmd_media_rm(a) -> int:
+    case = _case(a.engagement)
+    rec = case.record(a.slug)
+    items = rec["media_items"]
+    if not 0 <= a.index < len(items):
+        err(f"media_items index {a.index} out of range: {a.slug} has {len(items)} item(s)")
+        return EXIT_ERR
+    gone = items.pop(a.index)
+    case.save_record(a.slug, rec)
+    print(f"{a.slug}: removed media item {a.index}: {gone['title']} — {gone['publisher']} {gone['url']}")
+    return EXIT_OK
+
+
+def cmd_gap_add(a) -> int:
+    case = _case(a.engagement)
+    rec = case.record(a.slug)
+    R.add_coverage_gap(rec, a.text)
+    case.save_record(a.slug, rec)
+    print(f"{a.slug}: coverage gap recorded: {a.text}")
+    return EXIT_OK
+
+
 def cmd_layerb_close(a) -> int:
     case = _case(a.engagement)
     rec = case.record(a.slug)
     queries = [q for q in Path(a.queries_file).read_text().splitlines() if q.strip()]
     langs = [l.strip() for l in a.languages.split(",")]
+    if a.status == "failed" and not (a.reason or "").strip():
+        err("--status failed requires --reason: a failed layer must name its coverage gap (§6.7)")
+        return EXIT_ERR
     m = M.select(rec.get("layer_c"))
+    if m.mode == "full" and a.mode == "reduced":
+        # Reduced mode is only ever earned by a Layer C match with media (§3.0). Declaring it
+        # otherwise would narrow the search on paper without narrowing what was missed.
+        err(f"refusing to record reduced mode: computed mode is full ({m.reason}). "
+            "Run the full query plan, or re-run Layer C first.")
+        return EXIT_ERR
     if m.mode != a.mode:
         err(f"warning: declared mode {a.mode} differs from computed mode {m.mode} ({m.reason}); recording declared mode")
         m = M.Mode(a.mode, f"declared by agent; computed was {m.mode}: {m.reason}", m.families, m.risk_window_months)
-    rec["checks_run"] = [c for c in rec["checks_run"] if c["layer"] != "B"]
-    rec["checks_run"].append(M.layer_b_check(m, queries, langs, now()))
+    R.replace_layer(rec, "B")
+    check = M.layer_b_check(m, queries, langs, now(), status=a.status)
+    if a.status == "failed":
+        check["error"] = a.reason
+        R.add_coverage_gap(rec, f"Layer B (web_search) incomplete: {a.reason}")
+    rec["checks_run"].append(check)
     case.save_record(a.slug, rec)
-    print(f"{a.slug}: Layer B closed, {len(queries)} query string(s), languages {','.join(langs)}")
+    print(f"{a.slug}: Layer B closed ({a.status}), {len(queries)} query string(s), languages {','.join(langs)}")
     return EXIT_OK
 
 
@@ -283,7 +326,11 @@ def cmd_credits(a) -> int:
     if not key:
         err("NameScan key not found")
         return EXIT_NOKEY
-    bal = NS.NameScanClient(make_ns_client(), key, test_mode=a.test).credits()
+    try:
+        bal = NS.NameScanClient(make_ns_client(), key, test_mode=a.test).credits()
+    except (KeyError, ValueError, TypeError) as e:
+        err(f"could not read NameScan credit balance: {type(e).__name__}: {e}")
+        return EXIT_ERR
     print(f"NameScan Sapphire balance: {bal} credits")
     return EXIT_OK
 
@@ -317,11 +364,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     md = sp.add_parser("media").add_subparsers(dest="sub", required=True)
     ma = md.add_parser("add"); ma.add_argument("engagement"); ma.add_argument("slug"); ma.set_defaults(fn=cmd_media_add)
+    mr = md.add_parser("rm"); mr.add_argument("engagement"); mr.add_argument("slug")
+    mr.add_argument("index", type=int, help="0-based index into media_items"); mr.set_defaults(fn=cmd_media_rm)
+
+    gp = sp.add_parser("gap").add_subparsers(dest="sub", required=True)
+    ga = gp.add_parser("add"); ga.add_argument("engagement"); ga.add_argument("slug")
+    ga.add_argument("text", help="what could not be checked, in the agent's own words"); ga.set_defaults(fn=cmd_gap_add)
 
     lb = sp.add_parser("layerb").add_subparsers(dest="sub", required=True)
     lc = lb.add_parser("close"); lc.add_argument("engagement"); lc.add_argument("slug")
     lc.add_argument("--mode", required=True, choices=["full", "reduced"]); lc.add_argument("--queries-file", required=True)
-    lc.add_argument("--languages", required=True); lc.set_defaults(fn=cmd_layerb_close)
+    lc.add_argument("--languages", required=True)
+    lc.add_argument("--status", default="ok", choices=["ok", "failed"])
+    lc.add_argument("--reason", help="required with --status failed; recorded as a coverage gap")
+    lc.set_defaults(fn=cmd_layerb_close)
 
     rg = sp.add_parser("registry").add_subparsers(dest="sub", required=True)
     ra = rg.add_parser("add"); ra.add_argument("engagement"); ra.add_argument("slug"); ra.set_defaults(fn=cmd_registry_add)

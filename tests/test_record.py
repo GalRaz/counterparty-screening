@@ -65,3 +65,58 @@ def test_validate_check_status_enum():
     rec = R.new_record(make_subject(), "E", "P", NOW)
     rec["checks_run"].append({"layer": "A", "provider": "opensanctions", "status": "done", "timestamp": NOW})
     assert any("status" in e for e in R.validate(rec))
+
+
+def full_record():
+    rec = R.new_record(make_subject(), "E", "P", NOW)
+    rec["checks_run"] = [
+        {"layer": "A", "provider": "opensanctions", "status": "ok", "timestamp": NOW},
+        {"layer": "B", "provider": "web_search", "status": "ok", "timestamp": NOW},
+        {"layer": "C", "provider": "namescan", "status": "ok", "timestamp": NOW},
+        {"layer": "D", "provider": "registries", "status": "ok", "timestamp": NOW},
+    ]
+    rec["watchlist_candidates"] = [{"id": "Q1", "assessment": "unreviewed"}]
+    rec["layer_c"] = {"scan_id": "ps-1"}
+    rec["layer_d"] = {"gleif": [], "companies_house": None, "manual_findings": []}
+    rec["proposed_subjects"] = [{"name": "Jane Doe", "type": "person"}]
+    rec["coverage_gaps"] = ["Layer A (opensanctions) not run: no API key", "no DOB supplied",
+                            "transliterated name — matcher precision reduced",
+                            "Layer C (namescan) not run: no API key",
+                            "Layer D Companies House not queried: no API key configured"]
+    return rec
+
+
+def test_replace_layer_a_drops_checks_candidates_and_its_gaps_only():
+    rec = full_record()
+    R.replace_layer(rec, "A")
+    assert [c["layer"] for c in rec["checks_run"]] == ["B", "C", "D"]
+    assert rec["watchlist_candidates"] == []
+    assert "no DOB supplied" in rec["coverage_gaps"]
+    assert "transliterated name — matcher precision reduced" in rec["coverage_gaps"]
+    assert not any(g.startswith("Layer A") for g in rec["coverage_gaps"])
+    assert rec["layer_c"] is not None and rec["layer_d"] is not None
+
+
+def test_replace_layer_c_clears_payload_and_gaps():
+    rec = full_record()
+    R.replace_layer(rec, "C")
+    assert [c["layer"] for c in rec["checks_run"]] == ["A", "B", "D"]
+    assert rec["layer_c"] is None
+    assert not any(g.startswith("Layer C") for g in rec["coverage_gaps"])
+    assert rec["watchlist_candidates"] != []
+
+
+def test_replace_layer_d_clears_payload_and_proposed_subjects():
+    rec = full_record()
+    R.replace_layer(rec, "D")
+    assert [c["layer"] for c in rec["checks_run"]] == ["A", "B", "C"]
+    assert rec["layer_d"] is None and rec["proposed_subjects"] == []
+    assert not any(g.startswith("Layer D") for g in rec["coverage_gaps"])
+
+
+def test_replace_layer_b_drops_only_layer_b():
+    rec = full_record()
+    rec["coverage_gaps"].append("Layer B (web_search) incomplete: no Dzongkha sources reachable")
+    R.replace_layer(rec, "B")
+    assert [c["layer"] for c in rec["checks_run"]] == ["A", "C", "D"]
+    assert not any(g.startswith("Layer B") for g in rec["coverage_gaps"])

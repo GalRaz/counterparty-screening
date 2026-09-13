@@ -55,3 +55,9 @@ def test_layer_b_check_shape():
     c = M.layer_b_check(M.select(None), ['"x"'], ["en"], NOW)
     assert c == {"layer": "B", "provider": "web_search", "mode": "full", "mode_reason": c["mode_reason"],
                  "queries_run": ['"x"'], "languages": ["en"], "status": "ok", "timestamp": NOW}
+
+
+def test_layer_b_check_can_be_closed_as_failed():
+    c = M.layer_b_check(M.select(None), [], ["en"], NOW, status="failed")
+    assert c["status"] == "failed"
+    assert M.layer_b_check(M.select(None), [], ["en"], NOW)["status"] == "ok"

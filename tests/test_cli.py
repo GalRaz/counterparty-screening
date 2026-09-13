@@ -204,3 +204,119 @@ def test_run_a_missing_key_exits_4(capsys, monkeypatch, wired):
     assert code == 4
     rec = json.loads(run("record", "show", "E1", "mark-phillips", capsys=capsys)[1].out)
     assert rec["checks_run"][0]["layer"] == "A" and rec["checks_run"][0]["status"] == "not_run"
+
+
+def test_run_a_twice_replaces_rather_than_duplicates(capsys, monkeypatch, wired):
+    setup_case(capsys, monkeypatch)
+    assert run("run", "A", "E1", capsys=capsys)[0] == 0
+    assert run("run", "A", "E1", capsys=capsys)[0] == 0
+    rec = json.loads(run("record", "show", "E1", "mark-phillips", capsys=capsys)[1].out)
+    assert [c["layer"] for c in rec["checks_run"]] == ["A"]
+    assert len(rec["watchlist_candidates"]) == 2
+    assert run("lint", "E1", capsys=capsys)[0] == 0
+
+
+def test_run_c_after_missing_key_replaces_the_not_run_entry(capsys, monkeypatch, wired):
+    setup_case(capsys, monkeypatch)
+    monkeypatch.setattr(cli.config, "get_secret", lambda name: None)
+    assert run("run", "C", "E1", "--subject", "mark-phillips", capsys=capsys)[0] == 4
+    monkeypatch.setattr(cli.config, "get_secret", lambda name: "NSKEY")
+    assert run("run", "C", "E1", "--subject", "mark-phillips", capsys=capsys)[0] == 0
+    rec = json.loads(run("record", "show", "E1", "mark-phillips", capsys=capsys)[1].out)
+    cs = [c for c in rec["checks_run"] if c["layer"] == "C"]
+    assert len(cs) == 1 and cs[0]["status"] == "ok"
+    assert not any("not run: no API key" in g for g in rec["coverage_gaps"])
+    run("report", "E1", "--force", capsys=capsys)
+    text = (wired / "E1" / "summary.md").read_text()
+    row = [l for l in text.splitlines() if l.startswith("| Mark Phillips |")][0]
+    assert "scan ps-abc123" in row and "n/a" not in row
+    assert "Layer C (namescan) not run: no API key" not in text
+
+
+def test_run_d_twice_does_not_duplicate_proposed_subjects(capsys, monkeypatch, wired):
+    setup_case(capsys, monkeypatch)
+    assert run("run", "D", "E1", capsys=capsys)[0] == 0
+    assert run("run", "D", "E1", capsys=capsys)[0] == 0
+    rec = json.loads(run("record", "show", "E1", "jearrard-energy-resources-ltd", capsys=capsys)[1].out)
+    assert [c["layer"] for c in rec["checks_run"]] == ["D"]
+    assert len(rec["proposed_subjects"]) == 1
+
+
+def test_test_and_no_media_rejected_on_layers_a_and_d(capsys, monkeypatch, wired):
+    setup_case(capsys, monkeypatch)
+    code, out = run("run", "A", "E1", "--test", capsys=capsys)
+    assert code == 1 and "Layer C" in out.err
+    code, out = run("run", "D", "E1", "--no-media", capsys=capsys)
+    assert code == 1 and "Layer C" in out.err
+
+
+def test_media_rm_removes_by_index(capsys, monkeypatch, wired):
+    setup_case(capsys, monkeypatch)
+    item = {"title": "Councillor fined", "publisher": "Example News", "published": "2024-06-01",
+            "url": "https://news.example/1", "retrieval_status": "full", "identity": "possible_subject",
+            "corroborator": None, "legal_status": "regulatory_action", "source_type": "wire"}
+    other = {**item, "title": "Unrelated arrest", "url": "https://news.example/2"}
+    assert run("media", "add", "E1", "mark-phillips", stdin=json.dumps([item, other]),
+               monkeypatch=monkeypatch, capsys=capsys)[0] == 0
+    code, out = run("media", "rm", "E1", "mark-phillips", "0", capsys=capsys)
+    assert code == 0 and "Councillor fined" in out.out
+    rec = json.loads(run("record", "show", "E1", "mark-phillips", capsys=capsys)[1].out)
+    assert [m["title"] for m in rec["media_items"]] == ["Unrelated arrest"]
+    code, out = run("media", "rm", "E1", "mark-phillips", "5", capsys=capsys)
+    assert code == 1 and "out of range" in out.err
+
+
+def test_gap_add_records_a_coverage_gap(capsys, monkeypatch, wired):
+    setup_case(capsys, monkeypatch)
+    code, out = run("gap", "add", "E1", "mark-phillips", "no Dzongkha-language sources reachable", capsys=capsys)
+    assert code == 0
+    rec = json.loads(run("record", "show", "E1", "mark-phillips", capsys=capsys)[1].out)
+    assert rec["coverage_gaps"] == ["no Dzongkha-language sources reachable"]
+
+
+def test_layerb_close_refuses_to_downgrade_full_to_reduced(capsys, monkeypatch, wired):
+    setup_case(capsys, monkeypatch)
+    qf = wired / "q.txt"
+    qf.write_text('"Mark Phillips"\n')
+    code, out = run("layerb", "close", "E1", "mark-phillips", "--mode", "reduced",
+                    "--queries-file", str(qf), "--languages", "en", capsys=capsys)
+    assert code == 1 and "full" in out.err
+    rec = json.loads(run("record", "show", "E1", "mark-phillips", capsys=capsys)[1].out)
+    assert rec["checks_run"] == []
+
+
+def test_layerb_close_allows_declaring_full_when_computed_is_reduced(capsys, monkeypatch, wired):
+    setup_case(capsys, monkeypatch)
+    assert run("run", "C", "E1", "--subject", "mark-phillips", capsys=capsys)[0] == 0
+    qf = wired / "q.txt"
+    qf.write_text('"Mark Phillips"\n')
+    code, out = run("layerb", "close", "E1", "mark-phillips", "--mode", "full",
+                    "--queries-file", str(qf), "--languages", "en", capsys=capsys)
+    assert code == 0
+    rec = json.loads(run("record", "show", "E1", "mark-phillips", capsys=capsys)[1].out)
+    b = [c for c in rec["checks_run"] if c["layer"] == "B"][0]
+    assert b["mode"] == "full" and "computed was reduced" in b["mode_reason"]
+
+
+def test_layerb_close_failed_requires_reason_and_records_gap(capsys, monkeypatch, wired):
+    setup_case(capsys, monkeypatch)
+    qf = wired / "q.txt"
+    qf.write_text('"Mark Phillips"\n')
+    code, out = run("layerb", "close", "E1", "mark-phillips", "--mode", "full", "--status", "failed",
+                    "--queries-file", str(qf), "--languages", "en", capsys=capsys)
+    assert code == 1 and "--reason" in out.err
+    code, out = run("layerb", "close", "E1", "mark-phillips", "--mode", "full", "--status", "failed",
+                    "--reason", "search tooling unavailable", "--queries-file", str(qf),
+                    "--languages", "en", capsys=capsys)
+    assert code == 0
+    rec = json.loads(run("record", "show", "E1", "mark-phillips", capsys=capsys)[1].out)
+    b = [c for c in rec["checks_run"] if c["layer"] == "B"][0]
+    assert b["status"] == "failed" and b["error"] == "search tooling unavailable"
+    assert "Layer B (web_search) incomplete: search tooling unavailable" in rec["coverage_gaps"]
+    assert run("lint", "E1", capsys=capsys)[0] == 0
+
+
+def test_credits_data_error_exits_1(capsys, monkeypatch, wired):
+    monkeypatch.setattr(cli.NS.NameScanClient, "credits", lambda self: (_ for _ in ()).throw(KeyError("balance")))
+    code, out = run("credits", capsys=capsys)
+    assert code == 1 and "balance" in out.err

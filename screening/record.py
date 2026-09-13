@@ -45,6 +45,24 @@ def add_coverage_gap(record: dict, gap: str) -> None:
         record["coverage_gaps"].append(gap)
 
 
+def replace_layer(record: dict, layer: str) -> None:
+    """Undo what a previous run of `layer` wrote, so re-running it replaces instead of duplicating.
+
+    Coverage gaps naming the layer ("Layer C ...") describe that call's outcome and go with it.
+    Gaps that are facts about the subject ("no DOB supplied", "transliterated name — matcher
+    precision reduced") survive: a re-run does not make them untrue.
+    """
+    record["checks_run"] = [c for c in record["checks_run"] if c.get("layer") != layer]
+    record["coverage_gaps"] = [g for g in record["coverage_gaps"] if not g.startswith(f"Layer {layer}")]
+    if layer == "A":
+        record["watchlist_candidates"] = []
+    elif layer == "C":
+        record["layer_c"] = None
+    elif layer == "D":
+        record["layer_d"] = None
+        record["proposed_subjects"] = []
+
+
 def new_media_item(*, title: str, publisher: str, published: str | None, url: str, retrieved: str,
                    retrieval_status: str, identity: str, corroborator: str | None,
                    legal_status: str, source_type: str, query: str | None = None,

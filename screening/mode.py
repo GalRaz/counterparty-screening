@@ -58,6 +58,7 @@ def query_plan(subject: Subject, mode: Mode, languages: list[str]) -> dict:
     }
 
 
-def layer_b_check(mode: Mode, queries_run: list[str], languages: list[str], now: str) -> dict:
+def layer_b_check(mode: Mode, queries_run: list[str], languages: list[str], now: str,
+                  *, status: str = "ok") -> dict:
     return {"layer": "B", "provider": "web_search", "mode": mode.mode, "mode_reason": mode.reason,
-            "queries_run": list(queries_run), "languages": list(languages), "status": "ok", "timestamp": now}
+            "queries_run": list(queries_run), "languages": list(languages), "status": status, "timestamp": now}
