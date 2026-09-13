@@ -74,3 +74,38 @@ def test_watchlist_candidates_listed_as_unreviewed(cases_dir):
                                            "assessment": "unreviewed", "proposed_disposition": "likely different person: different state"})
     out = RP.render(c, recs, NOW)
     assert "Q1" in out and "0.74" in out and "unreviewed" in out and "likely different person" in out
+
+
+def test_sparse_layer_d_never_renders_none(cases_dir):
+    c = build_case(cases_dir)
+    recs = [c.record(s) for s in c.slugs()]
+    org_rec = recs[0]
+    org_rec["checks_run"].append({"layer": "D", "provider": "registries", "sources": ["gleif", "companies_house"],
+                                  "status": "ok", "error": None, "timestamp": NOW})
+    org_rec["layer_d"] = {
+        "gleif": [{
+            "lei": "X",
+            "legal_name": "Acme",
+            "status": None,
+            "jurisdiction": None,
+            "registered_as": None,
+            "address": {"lines": [], "city": None, "country": None},
+            "registration_status": None
+        }],
+        "companies_house": {
+            "company_number": "1",
+            "company_name": "Acme Ltd",
+            "status": None,
+            "incorporated": None,
+            "type": None,
+            "sic_codes": [],
+            "accounts": {"next_due": None, "overdue": None},
+            "registered_office": None,
+            "officers": [{"name": "DOE, Jane", "role": None, "appointed_on": None, "resigned_on": None,
+                          "nationality": None, "country_of_residence": None}]
+        },
+        "manual_findings": []
+    }
+    out = RP.render(c, recs, NOW)
+    assert "None" not in out
+    assert L.lint_report(out, recs) == []

@@ -2,10 +2,15 @@
 from __future__ import annotations
 
 from screening.case import Case
-from screening.lint import SECTION_8_MARKER
+from screening.lint import SECTION_8_MARKER, _layer_c_ok
 
 NEGATIVE_MEDIA = ("No adverse media items meeting the identity-resolution criteria were returned by the "
                   "queries listed in `queries_run`, searched in {langs} on {date}.")
+
+
+def _or(value, fallback: str = "unknown") -> str:
+    """Return str(value) if not None or empty string, else fallback."""
+    return str(value) if value not in (None, "") else fallback
 
 
 def _check(record: dict, layer: str) -> dict | None:
@@ -46,11 +51,6 @@ def _section_8(records: list[dict], now: str) -> str:
             f"and by structured web search for adverse media in {', '.join(langs)} on {now[:10]}. {SECTION_8_MARKER}: "
             "it does not include proprietary analyst-curated risk profiles or a licensed negative-news index, and no "
             "third-party screening provider has reviewed these results.")
-
-
-def _layer_c_ok(r: dict) -> bool:
-    c = _check(r, "C")
-    return r.get("layer_c") is not None and c is not None and c["status"] == "ok"
 
 
 def render(case: Case, records: list[dict], now: str) -> str:
@@ -106,8 +106,9 @@ def render(case: Case, records: list[dict], now: str) -> str:
         if r["watchlist_candidates"]:
             for c in r["watchlist_candidates"]:
                 pd = f" — proposed: {c['proposed_disposition']}" if c.get("proposed_disposition") else ""
-                w(f"- `{c['id']}` {c['caption']} — score {c['score']}, topics {', '.join(c['topics']) or 'none'}, "
-                  f"datasets {', '.join(c['datasets'])} — assessment: {c['assessment']}{pd}")
+                w(f"- `{c.get('id')}` {_or(c.get('caption') or c.get('id'))} — score {_or(c.get('score'))}, "
+                  f"topics {', '.join(c.get('topics') or []) or 'none'}, "
+                  f"datasets {', '.join(c.get('datasets') or [])} — assessment: {c['assessment']}{pd}")
         else:
             a = _check(r, "A")
             w("- No candidates at or above threshold 0.7 were returned." if a and a["status"] == "ok" else "- Layer A did not complete.")
@@ -143,14 +144,18 @@ def render(case: Case, records: list[dict], now: str) -> str:
         if ld:
             w("**Registry (Layer D):**")
             for g in ld.get("gleif", []):
-                w(f"- GLEIF: LEI `{g['lei']}` {g['legal_name']}, status {g['status']}, jurisdiction {g['jurisdiction']}, "
-                  f"registered as {g['registered_as']}, address {', '.join(g['address']['lines'])}, {g['address']['city']}, {g['address']['country']}")
+                w(f"- GLEIF: LEI `{g['lei']}` {g['legal_name']}, status {_or(g.get('status'))}, "
+                  f"jurisdiction {_or(g.get('jurisdiction'))}, "
+                  f"registered as {_or(g.get('registered_as'))}, address {', '.join(g['address']['lines'])}, "
+                  f"{_or(g['address'].get('city'))}, {_or(g['address'].get('country'))}")
             ch = ld.get("companies_house")
             if ch:
-                w(f"- Companies House `{ch['company_number']}`: {ch['company_name']}, {ch['status']}, incorporated {ch['incorporated']}, "
-                  f"SIC {', '.join(ch['sic_codes'])}, accounts next due {ch['accounts']['next_due']}"
+                w(f"- Companies House `{ch['company_number']}`: {ch['company_name']}, {_or(ch.get('status'))}, "
+                  f"incorporated {_or(ch.get('incorporated'))}, "
+                  f"SIC {', '.join(ch['sic_codes'])}, accounts next due {_or(ch['accounts'].get('next_due'))}"
                   f"{' (OVERDUE)' if ch['accounts']['overdue'] else ''}. Officers: "
-                  + "; ".join(f"{o['name']} ({o['role']}, {o['appointed_on']}{' – resigned ' + o['resigned_on'] if o.get('resigned_on') else ''})" for o in ch["officers"]))
+                  + "; ".join(f"{o['name']} ({_or(o.get('role'), 'officer')}, {_or(o.get('appointed_on'))}"
+                             f"{' – resigned ' + o['resigned_on'] if o.get('resigned_on') else ''})" for o in ch["officers"]))
             for f in ld.get("manual_findings", []):
                 fields = ", ".join(f"{k}: {v}" for k, v in f["fields"].items())
                 w(f"- {f['registry']} (retrieved {f['retrieved'][:10]}): {fields}. {f['url']}")
@@ -163,12 +168,12 @@ def render(case: Case, records: list[dict], now: str) -> str:
         for parent, p in props:
             w(f"- {p['name']} ({p['type']}) — {p['reason']}. Source: {p['source']}")
     else:
-        w("None proposed.")
+        w("No subjects proposed.")
     w("")
 
     w("## Coverage gaps\n")
     gaps = sorted({g for r in records for g in r["coverage_gaps"]})
-    for g in gaps or ["None recorded."]:
+    for g in gaps or ["No gaps recorded."]:
         w(f"- {g}")
     w("")
 
