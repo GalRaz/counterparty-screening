@@ -65,3 +65,10 @@ def test_parse_identifier_cli_form():
     assert parse_identifier("dob=1970-01-02@passport copy") == Identifier("dob", "1970-01-02", "passport copy")
     with pytest.raises(ValueError):
         parse_identifier("dob=1970")  # no source
+
+
+def test_name_is_non_latin_looks_at_the_primary_name_only():
+    s = Subject(type="person", name="Alexander Zakharov", aliases=["Александр Захаров"])
+    assert s.name_is_non_latin() is False
+    assert s.has_non_latin_name() is True
+    assert Subject(type="person", name="Александр Захаров").name_is_non_latin() is True

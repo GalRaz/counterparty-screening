@@ -36,7 +36,8 @@ def _status_cell(record: dict, layer: str) -> str:
         return f"{c.get('mode')} mode; {n} confirmed, {p} unresolved item(s)"
     if layer == "C":
         lc = record["layer_c"] or {}
-        return f"{lc.get('number_of_matches', '?')} match(es); media {lc.get('adverse_media')}; scan {lc.get('scan_id')}"
+        return (f"{_or(lc.get('number_of_matches'))} match(es); media {_or(lc.get('adverse_media'))}; "
+                f"scan {_or(lc.get('scan_id'))}")
     if layer == "D":
         ld = record["layer_d"] or {}
         parts = [f"GLEIF {len(ld.get('gleif', []))}", "CH yes" if ld.get("companies_house") else "CH no",
@@ -119,13 +120,20 @@ def render(case: Case, records: list[dict], now: str) -> str:
         lc = r.get("layer_c")
         w("**Commercial screening (Layer C, NameScan Sapphire):**")
         if lc:
-            w(f"- Scan `{lc['scan_id']}` on {str(lc.get('scan_date') or '')[:10]}: {lc.get('number_of_matches')} match(es) at "
+            w(f"- Scan `{lc['scan_id']}` on {str(lc.get('scan_date') or '')[:10]}: {_or(lc.get('number_of_matches'))} match(es) at "
               f"match rate ≥ {lc.get('match_rate_floor', 75)}; adverse media {lc['adverse_media']}; "
               f"credits {lc['credits_consumed']}{' (reused prior scan)' if lc.get('reused_prior_scan') else ''}"
               f"{' (TEST KEY — no real coverage)' if lc.get('test_mode') else ''}.")
-            for m in lc.get("matches", []):
-                ent = m.get("person") or m.get("entity") or {}
-                w(f"  - candidate: {ent.get('name') or ent.get('primaryName')} — matchRate {m.get('matchRate')}, category {m.get('category')} — assessment: unreviewed")
+            for m in lc.get("matches") or []:
+                lists = ", ".join(m.get("official_lists") or []) or "none"
+                w(f"  - candidate: {_or(m.get('name'))} — match rate {_or(m.get('match_rate'))}, "
+                  f"category {_or(m.get('category'))}, lists {lists} — assessment: unreviewed")
+            vendor_media = lc.get("advanced_media_items") or []
+            if vendor_media:
+                w(f"- Vendor adverse-media items (NameScan, not resolved to the subject by this system): {len(vendor_media)}")
+                for it in vendor_media:
+                    w(f"  - {_or(it.get('title'))} — {_or(it.get('source_name'))}, "
+                      f"{str(it.get('published') or '')[:10] or 'undated'} {_or(it.get('link'), '')}")
         else:
             w("- Not run.")
         w("")

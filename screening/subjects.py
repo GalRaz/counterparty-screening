@@ -31,6 +31,10 @@ def parse_identifier(text: str) -> Identifier:
     return Identifier(m.group(1).strip(), m.group(2).strip(), m.group(3).strip())
 
 
+def _non_latin(name: str) -> bool:
+    return any(ch.isalpha() and "LATIN" not in unicodedata.name(ch, "LATIN") for ch in name)
+
+
 def _squash(name: str) -> str:
     return " ".join(name.split())
 
@@ -91,11 +95,12 @@ class Subject:
         return None
 
     def has_non_latin_name(self) -> bool:
-        for n in self.all_names():
-            for ch in n:
-                if ch.isalpha() and "LATIN" not in unicodedata.name(ch, "LATIN"):
-                    return True
-        return False
+        """True if any name variant is non-Latin (Layer A transliteration gap)."""
+        return any(_non_latin(n) for n in self.all_names())
+
+    def name_is_non_latin(self) -> bool:
+        """True if the primary name itself is non-Latin. Layer C encodes this name, not the aliases."""
+        return _non_latin(self.name)
 
     def split_person_name(self) -> tuple[str, str, str]:
         parts = self.name.split()

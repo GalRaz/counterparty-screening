@@ -290,3 +290,60 @@ def test_run_layer_c_credits_endpoint_failure_aborts(tmp_path):
     with Store(tmp_path / "s.db") as store:
         with pytest.raises(NS.RunAborted, match="balance"):
             NS.run_layer_c([org()], client_for(handler), store, now=NOW, max_subjects=20)
+
+
+def test_person_body_splits_latin_primary_name_even_with_non_latin_alias():
+    s = Subject(type="person", name="Alexander Zakharov", aliases=["Александр Захаров"])
+    body = NS.build_person_body(s, include_media=False)
+    assert body["firstName"] == "Alexander" and body["lastName"] == "Zakharov"
+    assert "originalName" not in body
+
+
+def test_aliases_not_sent_are_recorded_as_a_coverage_gap(tmp_path):
+    handler, _ = make_handler()
+    s = Subject(type="person", name="Mark Phillips", aliases=["M. Phillips", "Marcus Phillips"],
+                identifiers=[Identifier("dob", "1970", "passport copy")])
+    with Store(tmp_path / "s.db") as store:
+        res = client_for(handler).scan(s, include_media=True, now=NOW, store=store)
+    assert ("Layer C scanned the primary name only; alias variant(s) not sent: M. Phillips, Marcus Phillips"
+            in res.coverage_gaps)
+
+
+def test_no_alias_gap_without_aliases(tmp_path):
+    handler, _ = make_handler()
+    with Store(tmp_path / "s.db") as store:
+        res = client_for(handler).scan(person(), include_media=True, now=NOW, store=store)
+    assert not any("alias variant" in g for g in res.coverage_gaps)
+
+
+def test_apply_writes_slim_match_and_media_shapes(tmp_path):
+    handler, _ = make_handler()
+    with Store(tmp_path / "s.db") as store:
+        res = client_for(handler).scan(person(), include_media=True, now=NOW, store=store)
+    rec = new_record(person(), "E", "P", NOW)
+    res.apply(rec)
+    assert rec["layer_c"]["scan_date"] == "2026-09-13T10:00:00"
+    assert rec["layer_c"]["matches"] == [{
+        "name": "Mark Phillips", "match_rate": 88, "category": "PEP", "matched_fields": "Name",
+        "official_lists": ["Australian PEP"], "is_current": True}]
+    assert rec["layer_c"]["advanced_media_items"] == [{
+        "title": "Council fined over procurement", "source_name": "Example News",
+        "published": "2024-06-01T00:00:00", "link": "https://news.example/1"}]
+    # the full vendor payload stays in the cache, not in the record
+    with Store(tmp_path / "s.db") as store:
+        assert "Full text." in store.vendor_text("ps-abc123")
+
+
+def test_apply_slims_organisation_matches(tmp_path):
+    body = {**load_fixture("namescan_org.json"), "numberOfMatches": 1, "corporates": [
+        {"matchRate": 91, "matchedFields": "Name", "category": "Sanction",
+         "entity": {"primaryName": "Green Bond Corporation",
+                    "officialLists": [{"keyword": "EU Sanctions", "isCurrent": False}]}}]}
+    handler, _ = make_handler(org_body=body)
+    with Store(tmp_path / "s.db") as store:
+        res = client_for(handler).scan(org(), include_media=False, now=NOW, store=store)
+    rec = new_record(org(), "E", "P", NOW)
+    res.apply(rec)
+    assert rec["layer_c"]["matches"] == [{
+        "name": "Green Bond Corporation", "match_rate": 91, "category": "Sanction",
+        "matched_fields": "Name", "official_lists": ["EU Sanctions"], "is_current": False}]

@@ -124,3 +124,29 @@ def test_test_key_layer_c_keeps_section_8_and_is_declared(cases_dir):
     assert L.SECTION_8_MARKER in out
     assert "Layer C was run with the NameScan TEST key for 2 subject(s): no real coverage, no credits spent." in out
     assert L.lint_report(out, recs) == []
+
+
+def test_layer_c_matches_and_vendor_media_are_rendered(cases_dir):
+    c = build_case(cases_dir)
+    recs = [c.record(s) for s in c.slugs()]
+    for r in recs:
+        r["checks_run"].append({"layer": "C", "provider": "namescan", "tier": "sapphire", "status": "ok",
+                                "timestamp": NOW, "attempts": 1})
+        r["layer_c"] = {"provider": "namescan", "tier": "sapphire", "scan_id": "ps-1", "number_of_matches": None,
+                        "adverse_media": "ok", "credits_consumed": 1.25, "reused_prior_scan": False,
+                        "test_mode": False, "scan_date": NOW, "match_rate_floor": 75,
+                        "matches": [{"name": "Mark Phillips", "match_rate": 88, "category": "PEP",
+                                     "matched_fields": "Name", "official_lists": ["Australian PEP"],
+                                     "is_current": True}],
+                        "advanced_media_items": [{"title": "Council fined over procurement",
+                                                  "source_name": "Example News",
+                                                  "published": "2024-06-01T00:00:00",
+                                                  "link": "https://news.example/1"}]}
+    out = RP.render(c, recs, NOW)
+    findings = L.report_section(out, "Findings")
+    assert "Mark Phillips — match rate 88, category PEP, lists Australian PEP — assessment: unreviewed" in findings
+    assert "Vendor adverse-media items (NameScan, not resolved to the subject by this system): 1" in findings
+    assert "Council fined over procurement — Example News, 2024-06-01 https://news.example/1" in findings
+    assert "unknown match(es)" in findings  # number_of_matches None never renders as None
+    assert "None" not in out
+    assert L.lint_report(out, recs) == []

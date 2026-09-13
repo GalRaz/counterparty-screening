@@ -31,9 +31,38 @@ class LayerCResult:
     def apply(self, record: dict) -> None:
         record["checks_run"].append(self.check)
         if self.layer_c is not None:
-            record["layer_c"] = {**self.layer_c, "matches": self.matches, "advanced_media_items": self.media}
+            record["layer_c"] = {**self.layer_c,
+                                 "matches": [slim_match(m) for m in self.matches],
+                                 "advanced_media_items": [slim_media_item(m) for m in self.media]}
         for g in self.coverage_gaps:
             add_coverage_gap(record, g)
+
+
+def _official_lists(entity: dict) -> tuple[list[str], bool | None]:
+    lists = entity.get("officialLists") or []
+    keywords = [l.get("keyword") for l in lists if l.get("keyword")]
+    flags = [l.get("isCurrent") for l in lists if l.get("isCurrent") is not None]
+    return keywords, (any(flags) if flags else None)
+
+
+def slim_match(match: dict) -> dict:
+    """What the record keeps of a vendor match (§7.7). The full object stays in the vendor-text cache."""
+    entity = match.get("person") or match.get("entity") or {}
+    keywords, is_current = _official_lists(entity)
+    return {
+        "name": entity.get("name") or entity.get("primaryName"),
+        "match_rate": match.get("matchRate"),
+        "category": match.get("category"),
+        "matched_fields": match.get("matchedFields"),
+        "official_lists": keywords,
+        "is_current": is_current,
+    }
+
+
+def slim_media_item(item: dict) -> dict:
+    """Citation only — no vendor `summary` or `body` is copied into the record."""
+    return {"title": item.get("title"), "source_name": item.get("sourceName"),
+            "published": item.get("publishedDate"), "link": item.get("link")}
 
 
 def _common(include_media: bool) -> dict:
@@ -43,7 +72,7 @@ def _common(include_media: bool) -> dict:
 
 def build_person_body(subject: Subject, include_media: bool) -> dict:
     body: dict = {}
-    if subject.has_non_latin_name():
+    if subject.name_is_non_latin():
         body["originalName"] = subject.name
     else:
         first, middle, last = subject.split_person_name()
@@ -155,6 +184,10 @@ class NameScanClient:
                 check["error"] = err
                 res.coverage_gaps.append(f"Layer C (namescan) call failed after {attempts} attempt(s): {err}")
                 return res
+            if subject.aliases:
+                # Sapphire scans one name per call; alias variants would each cost a credit (§7.2).
+                res.coverage_gaps.append("Layer C scanned the primary name only; alias variant(s) not sent: "
+                                         + ", ".join(subject.aliases))
 
         scan_id = data.get("scanId")
         if media_requested and not reused:
