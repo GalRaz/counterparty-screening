@@ -1,0 +1,22 @@
+[project]
+name = "screening"
+version = "0.1.0"
+description = "Counterparty screening: sanctions, PEP, adverse media, registries. Candidates for human review, never verdicts."
+requires-python = ">=3.12"
+dependencies = ["httpx>=0.27"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+screen = "screening.cli:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["screening*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
