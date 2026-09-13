@@ -195,3 +195,13 @@ def test_limitations_item_bullets_are_exempt_but_narrative_is_not():
     assert "forbidden_phrase" not in rules(L.lint_report(report, [rec()]))
     bad = report.replace("## Limitations\n", "## Limitations\nThe subject is clear.\n")
     assert "forbidden_phrase" in rules(L.lint_report(bad, [rec()]))
+
+
+def test_forbidden_phrase_in_report_header_is_caught():
+    report = "# Counterparty Screening\n**Commissioning party:** Acme — no risk here\n\n## Bottom line\nx\n"
+    assert "forbidden_phrase" in rules(L.lint_report(report, [rec()]))
+
+
+def test_forbidden_phrase_in_commissioning_party_record():
+    r = rec(commissioning_party="Acme clear")
+    assert "forbidden_phrase" in rules(L.lint_record(r))

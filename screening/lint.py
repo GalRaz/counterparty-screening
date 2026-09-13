@@ -42,7 +42,13 @@ def agent_prose(report: str) -> str:
     `Findings` and `Limitations` only the narrative lines — the candidate, vendor and unresolved-item
     bullets in both sections start with `- ` or `  - ` and are exempt.
     """
-    parts = [report_section(report, h) for h in ("Bottom line", "Coverage gaps")]
+    parts = []
+    # Include the preamble (everything before the first ## heading)
+    m = re.search(r"^(.*?)^## ", report, re.S | re.M)
+    if m:
+        parts.append(m.group(1))
+
+    parts += [report_section(report, h) for h in ("Bottom line", "Coverage gaps")]
     for heading in ("Findings", "Limitations"):
         parts += [l for l in report_section(report, heading).splitlines() if not l.lstrip().startswith("- ")]
     return "\n".join(parts)
@@ -65,7 +71,7 @@ def _agent_written(record: dict) -> str:
     Channel executive fined" is a citation, not a finding. The agent's own words about those items —
     corroborator, summary, proposed_disposition, the query it ran — are scanned in full.
     """
-    parts: list = [record.get("coverage_gaps") or []]
+    parts: list = [record.get("commissioning_party"), record.get("engagement"), record.get("coverage_gaps") or []]
     for m in record.get("media_items") or []:
         parts.append({k: m.get(k) for k in ("corroborator", "summary", "proposed_disposition", "query")})
     for w in record.get("watchlist_candidates") or []:
