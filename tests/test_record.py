@@ -67,6 +67,48 @@ def test_validate_check_status_enum():
     assert any("status" in e for e in R.validate(rec))
 
 
+def test_validate_allows_dispositioned_candidate_with_valid_assessment():
+    rec = R.new_record(make_subject(), "E", "P", NOW)
+    rec["watchlist_candidates"].append({"source": "opensanctions", "id": "Q1", "caption": "c", "score": 0.9,
+                                        "topics": [], "datasets": [], "assessment": "false_positive",
+                                        "dispositioned_by": "Jane Analyst", "dispositioned_at": NOW,
+                                        "disposition_note": "different DOB"})
+    assert R.validate(rec) == []
+
+
+def test_validate_rejects_dispositioned_candidate_with_invalid_assessment():
+    rec = R.new_record(make_subject(), "E", "P", NOW)
+    rec["watchlist_candidates"].append({"source": "opensanctions", "id": "Q1", "caption": "c", "score": 0.9,
+                                        "topics": [], "datasets": [], "assessment": "cleared",
+                                        "dispositioned_by": "Jane Analyst", "dispositioned_at": NOW,
+                                        "disposition_note": None})
+    errs = R.validate(rec)
+    assert any("watchlist_candidates[0].assessment" in e for e in errs)
+
+
+def test_validate_rejects_dispositioned_by_whitespace_only_as_undispositioned():
+    rec = R.new_record(make_subject(), "E", "P", NOW)
+    rec["watchlist_candidates"].append({"source": "opensanctions", "id": "Q1", "caption": "c", "score": 0.9,
+                                        "topics": [], "datasets": [], "assessment": "true_match",
+                                        "dispositioned_by": "   ", "dispositioned_at": NOW, "disposition_note": None})
+    errs = R.validate(rec)
+    assert any("watchlist_candidates[0].assessment" in e for e in errs)
+
+
+def test_validate_layer_c_match_disposition():
+    rec = R.new_record(make_subject(), "E", "P", NOW)
+    rec["layer_c"] = {"scan_id": "ps-1", "matches": [
+        {"name": "Mark Phillips", "assessment": "unreviewed", "dispositioned_by": None,
+         "dispositioned_at": None, "disposition_note": None},
+        {"name": "Someone Else", "assessment": "true_match", "dispositioned_by": "Jane Analyst",
+         "dispositioned_at": NOW, "disposition_note": None},
+    ]}
+    assert R.validate(rec) == []
+    rec["layer_c"]["matches"][0]["assessment"] = "true_match"
+    errs = R.validate(rec)
+    assert any("layer_c.matches[0].assessment" in e for e in errs)
+
+
 def full_record():
     rec = R.new_record(make_subject(), "E", "P", NOW)
     rec["checks_run"] = [

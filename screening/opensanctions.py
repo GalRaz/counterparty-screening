@@ -60,6 +60,9 @@ def _candidate(result: dict) -> dict:
         "entity": None,
         "assessment": "unreviewed",
         "proposed_disposition": None,
+        "dispositioned_by": None,
+        "dispositioned_at": None,
+        "disposition_note": None,
     }
 
 

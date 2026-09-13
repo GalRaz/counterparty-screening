@@ -12,6 +12,7 @@ RETRIEVAL_STATUS = ("full", "snippet_only", "unavailable")
 SOURCE_TYPE = ("primary", "wire", "aggregator", "low_accountability")
 CHECK_STATUS = ("ok", "failed", "not_run")
 LAYERS = ("A", "B", "C", "D")
+ASSESSMENT = ("false_positive", "true_match", "unresolved")
 
 
 def new_record(subject: Subject, engagement: str, commissioning_party: str, now: str) -> dict:
@@ -80,6 +81,18 @@ def new_media_item(*, title: str, publisher: str, published: str | None, url: st
     }
 
 
+def _validate_disposition(c: dict, path: str) -> list[str]:
+    """§5: `assessment` stays `unreviewed` unless a human sets `dispositioned_by`."""
+    by = c.get("dispositioned_by")
+    if isinstance(by, str) and by.strip():
+        if c.get("assessment") not in ASSESSMENT:
+            return [f"{path}.assessment {c.get('assessment')!r} not in {ASSESSMENT} (dispositioned by {by!r})"]
+        return []
+    if c.get("assessment") != "unreviewed":
+        return [f"{path}.assessment must stay 'unreviewed' (§5)"]
+    return []
+
+
 def validate(record: dict) -> list[str]:
     errs: list[str] = []
     if record.get("human_review_required") is not True:
@@ -90,8 +103,9 @@ def validate(record: dict) -> list[str]:
         if c.get("layer") not in LAYERS:
             errs.append(f"checks_run[{i}].layer {c.get('layer')!r} not in {LAYERS}")
     for i, w in enumerate(record.get("watchlist_candidates", [])):
-        if w.get("assessment") != "unreviewed":
-            errs.append(f"watchlist_candidates[{i}].assessment must stay 'unreviewed' (§5)")
+        errs += _validate_disposition(w, f"watchlist_candidates[{i}]")
+    for i, m in enumerate((record.get("layer_c") or {}).get("matches") or []):
+        errs += _validate_disposition(m, f"layer_c.matches[{i}]")
     for i, m in enumerate(record.get("media_items", [])):
         p = f"media_items[{i}]"
         if m.get("identity") not in IDENTITY:

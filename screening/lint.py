@@ -76,6 +76,9 @@ def _agent_written(record: dict) -> str:
         parts.append({k: m.get(k) for k in ("corroborator", "summary", "proposed_disposition", "query")})
     for w in record.get("watchlist_candidates") or []:
         parts.append(w.get("proposed_disposition"))
+        parts.append(w.get("disposition_note"))
+    for m in (record.get("layer_c") or {}).get("matches") or []:
+        parts.append(m.get("disposition_note"))
     for p in record.get("proposed_subjects") or []:
         parts.append({k: p.get(k) for k in ("reason", "source")})
     for c in record.get("checks_run") or []:
@@ -96,6 +99,17 @@ def lint_record(record: dict) -> list[Violation]:
         if m.get("identity") == "confirmed_subject" and not (m.get("corroborator") or "").strip():
             vs.append(Violation("confirmed_without_corroborator",
                                 f"media_items[{i}] is confirmed_subject with no corroborator (§3.2)", f"{slug}/record.json"))
+
+    for i, w in enumerate(record["watchlist_candidates"]):
+        if w.get("assessment") != "unreviewed" and not (w.get("dispositioned_by") or "").strip():
+            vs.append(Violation("disposition_without_human",
+                                f"watchlist_candidates[{i}] assessment {w.get('assessment')!r} set without a human "
+                                "dispositioning it (dispositioned_by) (§5)", f"{slug}/record.json"))
+    for i, m in enumerate((record.get("layer_c") or {}).get("matches") or []):
+        if m.get("assessment") != "unreviewed" and not (m.get("dispositioned_by") or "").strip():
+            vs.append(Violation("disposition_without_human",
+                                f"layer_c.matches[{i}] assessment {m.get('assessment')!r} set without a human "
+                                "dispositioning it (dispositioned_by) (§5)", f"{slug}/record.json"))
 
     gaps = " ".join(record["coverage_gaps"]).lower()
     for i, c in enumerate(record["checks_run"]):

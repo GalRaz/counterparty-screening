@@ -61,6 +61,7 @@ def test_match_ok_enriches_and_flags_transliteration():
     assert res.candidates[0]["topics"] == ["sanction"]
     assert res.candidates[0]["entity"]["properties"]["familyPerson"]
     assert res.candidates[0]["assessment"] == "unreviewed"
+    assert res.candidates[0]["dispositioned_by"] is None
     assert "transliterated name — matcher precision reduced" in res.coverage_gaps
     rec = new_record(person(), "E", "P", NOW)
     res.apply(rec)

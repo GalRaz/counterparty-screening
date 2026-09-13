@@ -171,6 +171,35 @@ def test_record_scans_proposed_subject_reason_and_source_not_name():
         rec(proposed_subjects=[{**p, "name": "X", "source": "a clear register"}])))
 
 
+def test_disposition_without_human_flags_watchlist_candidate():
+    w = {"source": "opensanctions", "id": "Q1", "caption": "c", "score": 0.9, "topics": [], "datasets": [],
+         "assessment": "true_match", "dispositioned_by": None, "disposition_note": None}
+    assert "disposition_without_human" in rules(L.lint_record(rec(watchlist_candidates=[w])))
+    w2 = {**w, "dispositioned_by": "Jane Analyst", "dispositioned_at": NOW}
+    assert "disposition_without_human" not in rules(L.lint_record(rec(watchlist_candidates=[w2])))
+
+
+def test_disposition_without_human_flags_layer_c_match():
+    m = {"name": "Mark Phillips", "assessment": "false_positive", "dispositioned_by": "  ",
+         "dispositioned_at": None, "disposition_note": None}
+    r = rec(layer_c={"scan_id": "ps-1", "matches": [m]})
+    assert "disposition_without_human" in rules(L.lint_record(r))
+    r2 = rec(layer_c={"scan_id": "ps-1", "matches": [{**m, "dispositioned_by": "Jane Analyst"}]})
+    assert "disposition_without_human" not in rules(L.lint_record(r2))
+
+
+def test_disposition_note_scanned_for_forbidden_phrases():
+    w = {"source": "opensanctions", "id": "Q1", "caption": "c", "score": 0.9, "topics": [], "datasets": [],
+         "assessment": "false_positive", "dispositioned_by": "Jane Analyst", "dispositioned_at": NOW,
+         "disposition_note": "subject is clear, different DOB"}
+    assert "forbidden_phrase" in rules(L.lint_record(rec(watchlist_candidates=[w])))
+
+    m = {"name": "Mark Phillips", "assessment": "true_match", "dispositioned_by": "Jane Analyst",
+         "dispositioned_at": NOW, "disposition_note": "no risk here"}
+    r = rec(layer_c={"scan_id": "ps-1", "matches": [m]})
+    assert "forbidden_phrase" in rules(L.lint_record(r))
+
+
 def test_record_scans_watchlist_candidate_disposition_not_caption():
     w = {"source": "opensanctions", "id": "Q1", "caption": "Clear Channel Holdings Ltd", "score": 0.9,
          "topics": [], "datasets": [], "assessment": "unreviewed"}
