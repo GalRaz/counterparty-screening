@@ -95,7 +95,7 @@ def render(case: Case, records: list[dict], now: str) -> str:
     n_poss = sum(1 for r in records for m in r["media_items"] if m["identity"] == "possible_subject")
     w(f"{len(records)} subject(s) screened. Watchlist candidates returned: {n_cand}. Media items linked to a subject "
       f"by a corroborating attribute: {n_conf}. Media items unresolved (name match only): {n_poss}. "
-      "All candidates carry `assessment: unreviewed`; the commissioning party dispositions them. "
+      "Candidates not yet dispositioned carry `assessment: unreviewed`; only the commissioning party dispositions them. "
       f"Candidates dispositioned by the commissioning party: {_count_dispositioned(records)}.\n")
     if not all_c:
         w(_section_8(records, now) + "\n")
