@@ -1,0 +1,10 @@
+{
+  "company_name": "JEARRARD ENERGY RESOURCES LTD",
+  "company_number": "13647702",
+  "company_status": "active",
+  "date_of_creation": "2021-09-28",
+  "type": "ltd",
+  "sic_codes": ["71121"],
+  "accounts": {"next_due": "2026-06-30", "overdue": true, "last_accounts": {"type": "micro-entity", "made_up_to": "2024-09-30"}},
+  "registered_office_address": {"address_line_1": "1 Marybrook Street", "locality": "Berkeley", "postal_code": "GL13 9AA"}
+}

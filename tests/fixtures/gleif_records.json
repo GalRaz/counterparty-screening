@@ -1,0 +1,20 @@
+{
+  "meta": {"pagination": {"total": 1}},
+  "data": [
+    {
+      "type": "lei-records",
+      "id": "984500765B652F3C6A05",
+      "attributes": {
+        "lei": "984500765B652F3C6A05",
+        "entity": {
+          "legalName": {"name": "CARBON CAPITAL CORPORATION PTY LTD", "language": "en"},
+          "legalAddress": {"addressLines": ["LEVEL 12, 60 CARRINGTON STREET"], "city": "SYDNEY", "country": "AU", "postalCode": "2000"},
+          "registeredAs": "667 478 471",
+          "jurisdiction": "AU",
+          "status": "ACTIVE"
+        },
+        "registration": {"status": "ISSUED", "validatedAt": {"id": "RA000014"}}
+      }
+    }
+  ]
+}
