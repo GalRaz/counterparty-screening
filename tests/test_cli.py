@@ -163,3 +163,44 @@ def test_credits_and_purge(capsys, monkeypatch, wired):
     assert code == 0 and "78.5" in out.out
     code, out = run("purge", capsys=capsys)
     assert code == 0 and "vendor_text" in out.out
+
+
+def test_usage_error_exits_1(capsys, monkeypatch, wired):
+    code, out = run("bogus", capsys=capsys)
+    assert code == 1
+    code, out = run("--help", capsys=capsys)
+    assert code == 0
+
+
+def test_media_add_malformed_stdin_exits_1(capsys, monkeypatch, wired):
+    setup_case(capsys, monkeypatch)
+    code, out = run("media", "add", "E1", "mark-phillips", stdin="not json", monkeypatch=monkeypatch, capsys=capsys)
+    assert code == 1 and "JSON" in out.err
+    code, out = run("media", "add", "E1", "mark-phillips", stdin='["x"]', monkeypatch=monkeypatch, capsys=capsys)
+    assert code == 1
+
+
+def test_report_force_writes_with_banner(capsys, monkeypatch, wired):
+    setup_case(capsys, monkeypatch)
+    run("run", "A", "E1", capsys=capsys)
+    item = {"title": "Councillor fined", "publisher": "Example News", "published": "2024-06-01",
+            "url": "https://news.example/1", "retrieval_status": "full", "identity": "confirmed_subject",
+            "corroborator": "role: councillor", "legal_status": "regulatory_action", "source_type": "wire",
+            "query": '"Mark Phillips" fine', "language": "en", "summary": "A fine was imposed."}
+    code, out = run("media", "add", "E1", "mark-phillips", stdin=json.dumps(item), monkeypatch=monkeypatch, capsys=capsys)
+    assert code == 0
+    code, out = run("report", "E1", "--force", capsys=capsys)
+    assert code == 2
+    summary = wired / "E1" / "summary.md"
+    assert summary.exists()
+    assert summary.read_text().startswith("> **LINT FAILED**")
+
+
+def test_run_a_missing_key_exits_4(capsys, monkeypatch, wired):
+    setup_case(capsys, monkeypatch)
+    monkeypatch.delenv("OPENSANCTIONS_API_KEY")
+    monkeypatch.setattr(cli.config, "get_secret", lambda name: None)
+    code, out = run("run", "A", "E1", capsys=capsys)
+    assert code == 4
+    rec = json.loads(run("record", "show", "E1", "mark-phillips", capsys=capsys)[1].out)
+    assert rec["checks_run"][0]["layer"] == "A" and rec["checks_run"][0]["status"] == "not_run"

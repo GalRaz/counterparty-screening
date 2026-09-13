@@ -18,6 +18,10 @@ from screening.subjects import Subject, parse_identifier
 EXIT_OK, EXIT_ERR, EXIT_LINT, EXIT_ABORT, EXIT_NOKEY = 0, 1, 2, 3, 4
 
 
+class UsageError(Exception):
+    """Data/usage problem detected while handling a command (exit 1)."""
+
+
 def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -53,14 +57,21 @@ def _case(engagement: str) -> Case:
 def _slugs(case: Case, only: str | None) -> list[str]:
     if only:
         if only not in case.slugs():
-            raise SystemExit(f"no subject {only!r} in {case.engagement}")
+            raise UsageError(f"no subject {only!r} in {case.engagement}")
         return [only]
     return case.slugs()
 
 
 def _read_stdin_json():
-    data = json.load(sys.stdin)
-    return data if isinstance(data, list) else [data]
+    try:
+        data = json.load(sys.stdin)
+    except json.JSONDecodeError as e:
+        raise UsageError(f"invalid JSON on stdin: {e}") from e
+    if isinstance(data, dict):
+        return [data]
+    if isinstance(data, list) and all(isinstance(item, dict) for item in data):
+        return data
+    raise UsageError("stdin JSON must be an object or a list of objects")
 
 
 # ---- commands -------------------------------------------------------------
@@ -180,13 +191,9 @@ def cmd_media_add(a) -> int:
     new = []
     for raw in items:
         raw.setdefault("retrieved", now())
-        try:
-            item = R.new_media_item(**{k: raw.get(k) for k in (
-                "title", "publisher", "published", "url", "retrieved", "retrieval_status", "identity",
-                "corroborator", "legal_status", "source_type", "query", "language", "summary", "proposed_disposition")})
-        except TypeError as e:
-            err(f"bad media item: {e}")
-            return EXIT_ERR
+        item = R.new_media_item(**{k: raw.get(k) for k in (
+            "title", "publisher", "published", "url", "retrieved", "retrieval_status", "identity",
+            "corroborator", "legal_status", "source_type", "query", "language", "summary", "proposed_disposition")})
         new.append(item)
     trial = {**rec, "media_items": rec["media_items"] + new}
     errs = R.validate(trial)
@@ -330,12 +337,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    a = build_parser().parse_args(argv)
+    try:
+        a = build_parser().parse_args(argv)
+    except SystemExit as e:
+        return EXIT_OK if e.code == 0 else EXIT_ERR
     try:
         return a.fn(a)
-    except (FileNotFoundError, FileExistsError, SystemExit) as e:
-        if isinstance(e, SystemExit) and isinstance(e.code, int):
-            return e.code
+    except UsageError as e:
+        err(str(e))
+        return EXIT_ERR
+    except (FileNotFoundError, FileExistsError) as e:
         err(str(e))
         return EXIT_ERR
     except httpx.HTTPError as e:
